@@ -105,9 +105,11 @@ module CHIP #(                                                                  
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     // TODO: any wire assignment
+    //attach the register to the wire
     assign rs1_wr = RS1;
     assign rs2_wr = RS2;
     assign rd_wr = RD;
+    //
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submodules
@@ -126,7 +128,13 @@ module CHIP #(                                                                  
         .rdata1 (RS1_DATA),           
         .rdata2 (RS2_DATA)
     );
-
+    MULDIV_unit muldiv_unit(
+        .mul_clk(i_clk),
+        .mul_rst_n(i_rst_n),
+        .mul_rs1(),
+        .mul_rs2(),
+        .mul_wdata()
+    );
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -189,7 +197,19 @@ endmodule
 
 module MULDIV_unit(
     // TODO: port declaration
+    mul_clk, mul_rst_n, trigger, ready_output, mode, mul_rs1, mul_rs2, mul_wdata
     );
+    parameter len = 32;
+    //trigger means the muldiv_unit should work now
+    input mul_clk, mul_rst_n, trigger;
+    //mode would be shift left, div, mul, and idle
+    //mul: 0, div: 1, shift left: 2, idle: 3
+    input [1:0] mode;
+    input [len-1:0] mul_rs1, mul_rs2;
+    output [2*len-1:0] mul_wdata;
+    //output the ready signal
+    output ready_output;
+    
     // Todo: HW2
 endmodule
 
@@ -234,6 +254,6 @@ module Cache#(
 
     // Todo: BONUS
     always @(posedge i_clk or negedge i_rst_n) begin
-    
+        
     end
 endmodule
