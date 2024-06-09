@@ -87,21 +87,21 @@ module CHIP #(                                                                  
     
     // TODO: any declaration
         reg [BIT_W-1:0] PC, next_PC;
-        wire mem_cen, mem_wen;
-        wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
-        wire mem_stall;
+        wire mem_stall; //data mem stall, which should be connected to the input
+        
+        reg imem_cen;   //instruction mem enable
+        reg dmem_cen;   //data mem enable 
+        reg dmem_wen;   //data mem write enable
+        reg finish;     //finish signal, ready to output
 
-        //we should use wire to connect to the wires of register file
-        //so we must create the register and its corresponding wire
+        //use wire to in/output of register file
+        //must create registers and its corresponding wires
         reg [4:0] RS1, RS2, RD;
-        wire [4:0] rs1_wr, rs2_wr, rd_wr;
-        //the data to Reg_file, which should be wire
-        wire[BIT_W-1:0] WRITE_DATA, RS1_DATA, RS2_DATA;
-        //signal after decoding to determine if the instr is load or ALU that 
-        //needs to write back to reg
-        wire write_to_reg;
+        wire [4:0] rs1_wr, rs2_wr, rd_wr;//to Reg_file, which is wire
+        wire[BIT_W-1:0] WRITE_DATA, RS1_DATA, RS2_DATA;//to Reg_file, which is wire
+        wire write_to_reg;//needs to write back to reg like ALU and LW
 
-        //multiplication declaration
+        //MULDIV-unit declaration
         //input of module can eat reg and wire
         //but output must connect to wire
         reg mul_ready, mul_valid;
@@ -121,6 +121,13 @@ module CHIP #(                                                                  
     assign rs1_wr = RS1;
     assign rs2_wr = RS2;
     assign rd_wr = RD;
+    //attach output wire of CHIP to reg
+    assign o_IMEM_addr = PC;//output the processing center of instr address
+    assign o_IMEM_cen = imem_cen;//tell instr mem to operate
+    assign o_DMEM_cen = dmem_cen;//tell memory to operate
+    assign o_DMEM_wen = dmem_wen;//tell memory to write, for store
+    assign mem_stall = i_DMEM_stall;//input -> wire so that we know when to stall
+    assign o_finish = finish;
     //
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -155,13 +162,18 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     
     // Todo: any combinational/sequential circuit
-
     always @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n) begin
+        if (!i_rst_n) begin//reset everything
             PC <= 32'h00010000; // Do not modify this value!!!
+            state <= S_IDLE;
+            mem_cen <= 0;
+            mem_wen <= 0;
         end
         else begin
             PC <= next_PC;
+            state <= state_nxt;
+            mem_cen <= mem_cen_nxt;
+            mem_wen <= mem_wen_nxt;
         end
     end
 endmodule
@@ -294,6 +306,20 @@ module MULDIV_unit(
             else ;
         end
     end
+
+    //Sequential always block
+    always @(posedge mul_clk or negedge mul_rst_n) begin
+        if (!mul_rst_n) begin
+            operand_a <= 0;
+            operand_b <= 0;
+            mode <= 0;
+        end
+        else begin
+            operand_a <= operand_a_nxt;
+            operand_b <= operand_b_nxt;
+            mode <= mode_nxt;
+        end
+    end
 endmodule
 
 module Cache#(
@@ -336,13 +362,18 @@ module Cache#(
     //------------------------------------------//
 
     // Todo: BONUS
-    // TODO: any declaration
-    reg [ADDR_W-1:0] addr;
-    
-    assign index = addr[21:12];
-    assign tag = addr[11:2];
+    // any declaration
+    reg [17:0] Tag; 				 
+    reg [7:0] Index; 				
+    reg [3:0] Byte_Offset;
+    reg [15:0] [31:0] Cache_Memory[256:0]; 		//a memory of registers 256 x 16 words ,where 1 word is 32 bits.
+    reg [17:0] Cache_Tags[256:0]; 	
 
-    always @(posedge i_clk or negedge i_rst_n) begin
-        
-    end
+    //Sequential always block
+    always@(posedge i_clk)begin
+	        Tag = i_proc_addr[31:14];
+        	Index = i_proc_addr[13:6];
+	        Byte_Offset = i_proc_addr[5:2];
+        end
+
 endmodule
