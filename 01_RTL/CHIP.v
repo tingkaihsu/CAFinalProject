@@ -218,6 +218,7 @@ module MULDIV_unit(
     parameter len = 32;
     //valid means the muldiv_unit should work now
     input mul_clk, mul_rst_n, mul_valid;
+    parameter MUL = 0, DIV = 1;
     input mul_mode; //mode=0, multiplication; mode=1, division
     input [len-1:0] mul_rs1, mul_rs2;
     output [2*len-1:0] mul_data;
@@ -225,10 +226,6 @@ module MULDIV_unit(
     output mul_done;
     
     // Todo: HW2
-    //state, which would be idle, one cycle operation
-    //multi-cycle operation
-    reg[1:0] state, state_nxt;
-    parameter S_IDLE = 2'b00, S_ONE_CUCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
     //the input would have "mul" as prefix
     reg [len-1:0] operand_a, operand_a_nxt;
     reg [len-1:0] operand_b, operand_b_nxt;
@@ -252,6 +249,49 @@ module MULDIV_unit(
             mode_nxt = mul_mode;
         end
         else begin
+            operand_a_nxt = operand_a;
+            operand_b_nxt = operand_b;
+            mode_nxt = mode;
+        end
+    end
+
+    // counter 
+    always @(posedge mul_clk) begin
+        if (cnt <= 31 && cnt >= 0) cnt <= cnt + 1;
+        else cnt <= 4'b0;
+    end
+
+    //ALU Output
+    always @(cnt) begin
+        if (mode == MUL) begin
+            if (cnt <= 31 && cnt >= 0) begin
+                if (temp_result==0) temp_result = operand_b;
+                else ;
+                if (temp_result[0] == 1) temp_result[2*len: len] = temp_result[2*len-1:len] + operand_a;
+                else ;
+                temp_result = (temp_result >> 1);
+            end
+            else ;
+        end
+        else begin
+            if (cnt <= 31 && cnt >= 0) begin
+                //initially, we copy dividend to temp_result
+                if (temp_result == 0) temp_result = (operand_a << 1);
+                else ;
+                //first determine if the remainder > divisor or not
+                if (temp_result[2*len-1: len] < operand_b) temp_result = (temp_result << 1);
+                else begin
+                    temp_result[2*len-1: len] = temp_result[2*len-1: len] - operand_b;
+                    //shift the whole result left 1 bit
+                    temp_result = (temp_result << 1);
+                    temp_result[0] = 1;
+                end
+                if (cnt == 31) begin
+                    temp_result[2*len: len] = (temp_result[2*len: len] >> 1);
+                end
+                else ;
+            end
+            else ;
         end
     end
 endmodule
