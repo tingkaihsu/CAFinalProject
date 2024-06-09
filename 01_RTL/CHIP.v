@@ -142,12 +142,12 @@ module CHIP #(                                                                  
     MULDIV_unit muldiv_unit(
         .mul_clk(i_clk),
         .mul_rst_n(i_rst_n),
-        .valid(mul_valid),
-        .mode(mul_mode),
+        .mul_valid(mul_valid),
+        .mul_mode(mul_mode),
         .mul_rs1(mul_rs1),
         .mul_rs2(mul_rs2),
-        .ready_output(mul_ready_output),
-        .mul_wdata(mul_wdata)
+        .mul_done(mul_ready_output),
+        .mul_data(mul_wdata)
     );
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
@@ -211,22 +211,38 @@ endmodule
 
 module MULDIV_unit(
     // TODO: port declaration
-    mul_clk, mul_rst_n, valid, ready_output, mode, mul_rs1, mul_rs2, mul_wdata
+    mul_clk, mul_rst_n, mul_valid, mul_done, mul_mode, mul_rs1, mul_rs2, mul_data
     );
 
     parameter len = 32;
     //valid means the muldiv_unit should work now
-    input mul_clk, mul_rst_n, valid;
+    input mul_clk, mul_rst_n, mul_valid;
     //mode would be shift left, div, mul, and idle
     //mul: 0, div: 1, shift left: 2, idle: 3
-    input [1:0] mode;
+    input [1:0] mul_mode;
     input [len-1:0] mul_rs1, mul_rs2;
-    output [2*len-1:0] mul_wdata;
+    output [2*len-1:0] mul_data;
     //output the ready signal
-    output ready_output;
-
+    output mul_done;
+    
     // Todo: HW2
+    //stat, which would be idle, one cycle operation
+    //multi-cycle
+    reg[1:0] state, state_nxt;
+    parameter S_IDLE = 2'b00, S_ONE_CUCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
+    reg [len-1:0] operand_a, operand_a_nxt;
+    reg [len-1:0] operand_b, operand_b_nxt;
+    reg [2*len-1:0] out_result; //this would finally connect to output
+    reg [2*len:0] temp_result;  //this would deal with overflow prob
+    //counter
+    reg [4:0] cnt;
+    reg ready_to_output;
 
+    //wire assignment
+    assign mul_done = ready_to_output;
+    assign mul_data = out_result;
+
+    
 endmodule
 
 module Cache#(
@@ -269,6 +285,12 @@ module Cache#(
     //------------------------------------------//
 
     // Todo: BONUS
+    // TODO: any declaration
+    reg [ADDR_W-1:0] addr;
+    
+    assign index = addr[21:12];
+    assign tag = addr[11:2];
+
     always @(posedge i_clk or negedge i_rst_n) begin
         
     end
