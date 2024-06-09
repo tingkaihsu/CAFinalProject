@@ -93,13 +93,15 @@ module CHIP #(                                                                  
         reg dmem_cen;   //data mem enable 
         reg dmem_wen;   //data mem write enable
         reg finish;     //finish signal, ready to output
+        reg[BIT_W-1:0] dmem_wdata, dmem_rdata, dmem_addr;
+        //memory write data, memory read data, memory address
 
         //use wire to in/output of register file
         //must create registers and its corresponding wires
         reg [4:0] RS1, RS2, RD;
         wire [4:0] rs1_wr, rs2_wr, rd_wr;//to Reg_file, which is wire
         wire[BIT_W-1:0] WRITE_DATA, RS1_DATA, RS2_DATA;//to Reg_file, which is wire
-        wire write_to_reg;//needs to write back to reg like ALU and LW
+        reg write_to_reg;//needs to write back to reg like ALU and LW, 0 for no, 1 for yes
 
         //MULDIV-unit declaration
         //input of module can eat reg and wire
@@ -122,13 +124,16 @@ module CHIP #(                                                                  
     assign rs2_wr = RS2;
     assign rd_wr = RD;
     //attach output wire of CHIP to reg
+    assign o_finish = finish;
     assign o_IMEM_addr = PC;//output the processing center of instr address
     assign o_IMEM_cen = imem_cen;//tell instr mem to operate
     assign o_DMEM_cen = dmem_cen;//tell memory to operate
     assign o_DMEM_wen = dmem_wen;//tell memory to write, for store
+    assign o_DMEM_addr = dmem_addr;
+    assign o_DMEM_wdata = dmem_wdata;
+    //attach input 
     assign mem_stall = i_DMEM_stall;//input -> wire so that we know when to stall
-    assign o_finish = finish;
-    //
+    
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submodules
@@ -139,7 +144,7 @@ module CHIP #(                                                                  
     Reg_file reg0(               
         .i_clk  (i_clk),             
         .i_rst_n(i_rst_n),         
-        .wen    (write_to_reg),          
+        .wen    (write_to_reg),//write back to reg        
         .rs1    (rs1_wr),                
         .rs2    (rs2_wr),                
         .rd     (rd_wr),                 
