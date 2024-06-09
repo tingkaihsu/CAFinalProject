@@ -27,7 +27,24 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Parameters
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
-
+    //TODO instructions
+    // ADD
+    // SUB 
+    // XOR 
+    // AND 
+    // ADDI 
+    // SLLI 
+    // SLTI 
+    // SRAI 
+    // LW 
+    // SW 
+    // BEQ 
+    // BGE 
+    // BLT 
+    // BNE 
+    // MUL 
+    // DIV 
+    // ECALL 
     // TODO: any declaration
     //assign opcode parameters
     parameter ASXA = 7'b0110011;   //add, sub, xor, and
@@ -37,8 +54,25 @@ module CHIP #(                                                                  
     parameter BRNCH = 7'b1100011;  //beq, bge, blt, bne
     parameter MULDIV = 7'b0110011;    //multiplication and division
     parameter ECALL = 7'b1110011;
-    //function code of instructions
-    
+    //function3 code of instructions
+    parameter FUNC3_ADD = 3'b000;
+    parameter FUNC3_SUB = 3'b000;
+    parameter FUNC3_OXR = 3'b100;
+    parameter FUNC3_AND = 3'b111;
+    parameter FUNC3_ADDI = 3'b000;
+    parameter FUNC3_SLLI = 3'b001;
+    parameter FUNC3_SLTI = 3'b010;
+    parameter FUNC3_SRAI = 3'b101;
+    parameter FUNC3_LW = 3'b010;
+    parameter FUNC3_SW = 3'b010;
+    parameter FUNC3_BEQ = 3'b000;
+    parameter FUNC3_BGE = 3'b101;
+    parameter FUNC3_BLT = 3'b100;
+    parameter FUNC3_BNE = 3'b001;
+    parameter FUNC3_MUL = 3'b000;
+    parameter FUNC3_DIV = 3'b100;
+    parameter FUNC3_ECALL = 3'b000;
+
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Wires and Registers
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -48,31 +82,41 @@ module CHIP #(                                                                  
         wire mem_cen, mem_wen;
         wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
         wire mem_stall;
-        reg ready_to_output;
-        reg write_to_reg;
+
+        //we should use wire to connect to the wires of register file
+        //so we must create the register and its corresponding wire
         reg [4:0] RS1, RS2, RD;
+        wire [4:0] rs1_wr, rs2_wr, rd_wr;
+        //the data to Reg_file, which should be wire
+        wire[BIT_W-1:0] WRITE_DATA, RS1_DATA, RS2_DATA;
+        //signal after decoding to determine if the instr is load or ALU that 
+        //needs to write back to reg
+        wire write_to_reg;
         
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     // TODO: any wire assignment
-    assign o_DMEM_wdata = mem_wdata;
-    assign o_finish = ready_to_output;
+    assign rs1_wr = RS1;
+    assign rs2_wr = RS2;
+    assign rd_wr = RD;
+
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submodules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 
     // TODO: Reg_file wire connection
+    //the content in () should be wire
     Reg_file reg0(               
         .i_clk  (i_clk),             
         .i_rst_n(i_rst_n),         
         .wen    (write_to_reg),          
-        .rs1    (RS1),                
-        .rs2    (RS2),                
-        .rd     (RD),                 
-        .wdata  (),             
-        .rdata1 (),           
-        .rdata2 ()
+        .rs1    (rs1_wr),                
+        .rs2    (rs2_wr),                
+        .rd     (rd_wr),                 
+        .wdata  (WRITE_DATA),             
+        .rdata1 (RS1_DATA),           
+        .rdata2 (RS2_DATA)
     );
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -181,5 +225,7 @@ module Cache#(
     //------------------------------------------//
 
     // Todo: BONUS
-
+    always @(posedge i_clk or negedge i_rst_n) begin
+    
+    end
 endmodule
