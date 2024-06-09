@@ -105,9 +105,10 @@ module CHIP #(                                                                  
         //input of module can eat reg and wire
         //but output must connect to wire
         reg mul_ready, mul_valid;
-        reg [1:0] mul_mode;
         reg [BIT_W-1:0] mul_rs1;
         reg [BIT_W-1:0] mul_rs2;
+        reg mul_mode;   //determine if mul or div
+        //output
         wire [2*BIT_W-1:0] mul_wdata;
         wire mul_ready_output;
 
@@ -211,27 +212,27 @@ endmodule
 
 module MULDIV_unit(
     // TODO: port declaration
-    mul_clk, mul_rst_n, mul_valid, mul_done, mul_mode, mul_rs1, mul_rs2, mul_data
+    mul_clk, mul_rst_n, mul_valid, mul_mode, mul_done, mul_rs1, mul_rs2, mul_data
     );
 
     parameter len = 32;
     //valid means the muldiv_unit should work now
     input mul_clk, mul_rst_n, mul_valid;
-    //mode would be shift left, div, mul, and idle
-    //mul: 0, div: 1, shift left: 2, idle: 3
-    input [1:0] mul_mode;
+    input mul_mode; //mode=0, multiplication; mode=1, division
     input [len-1:0] mul_rs1, mul_rs2;
     output [2*len-1:0] mul_data;
     //output the ready signal
     output mul_done;
     
     // Todo: HW2
-    //stat, which would be idle, one cycle operation
-    //multi-cycle
+    //state, which would be idle, one cycle operation
+    //multi-cycle operation
     reg[1:0] state, state_nxt;
     parameter S_IDLE = 2'b00, S_ONE_CUCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
+    //the input would have "mul" as prefix
     reg [len-1:0] operand_a, operand_a_nxt;
     reg [len-1:0] operand_b, operand_b_nxt;
+    reg mode, mode_nxt;
     reg [2*len-1:0] out_result; //this would finally connect to output
     reg [2*len:0] temp_result;  //this would deal with overflow prob
     //counter
@@ -242,7 +243,17 @@ module MULDIV_unit(
     assign mul_done = ready_to_output;
     assign mul_data = out_result;
 
-    
+    //Always Combination
+    //load input
+    always @(*) begin
+        if (mul_valid) begin
+            operand_a_nxt = mul_rs1;
+            operand_b_nxt = mul_rs2;
+            mode_nxt = mul_mode;
+        end
+        else begin
+        end
+    end
 endmodule
 
 module Cache#(
