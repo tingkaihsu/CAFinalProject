@@ -57,7 +57,7 @@ module CHIP #(                                                                  
     //function3 code of instructions
     parameter FUNC3_ADD = 3'b000;
     parameter FUNC3_SUB = 3'b000;
-    parameter FUNC3_OXR = 3'b100;
+    parameter FUNC3_XOR = 3'b100;
     parameter FUNC3_AND = 3'b111;
     parameter FUNC3_ADDI = 3'b000;
     parameter FUNC3_SLLI = 3'b001;
@@ -72,7 +72,15 @@ module CHIP #(                                                                  
     parameter FUNC3_MUL = 3'b000;
     parameter FUNC3_DIV = 3'b100;
     parameter FUNC3_ECALL = 3'b000;
-
+    //function7 code of instruction
+    parameter FUNC7_ADD = 7'b0000000;
+    parameter FUNC7_SUB = 7'b0100000;
+    parameter FUNC7_XOR = 7'b0000000;
+    parameter FUNC7_AND = 7'b0000000;
+    parameter FUNC7_SLLI = 7'b0000000;
+    parameter FUNC7_SRAI = 7'b0100000;
+    parameter FUNC7_MUL = 7'b0000001;
+    parameter FUNC7_DIV = 7'b0000001;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Wires and Registers
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
