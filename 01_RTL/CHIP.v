@@ -100,6 +100,17 @@ module CHIP #(                                                                  
         //signal after decoding to determine if the instr is load or ALU that 
         //needs to write back to reg
         wire write_to_reg;
+
+        //multiplication declaration
+        //input of module can eat reg and wire
+        //but output must connect to wire
+        reg mul_ready, mul_valid;
+        reg [1:0] mul_mode;
+        reg [BIT_W-1:0] mul_rs1;
+        reg [BIT_W-1:0] mul_rs2;
+        wire [2*BIT_W-1:0] mul_wdata;
+        wire mul_ready_output;
+
         
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
@@ -131,9 +142,12 @@ module CHIP #(                                                                  
     MULDIV_unit muldiv_unit(
         .mul_clk(i_clk),
         .mul_rst_n(i_rst_n),
-        .mul_rs1(),
-        .mul_rs2(),
-        .mul_wdata()
+        .valid(mul_valid),
+        .mode(mul_mode),
+        .mul_rs1(mul_rs1),
+        .mul_rs2(mul_rs2),
+        .ready_output(mul_ready_output),
+        .mul_wdata(mul_wdata)
     );
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
@@ -197,11 +211,12 @@ endmodule
 
 module MULDIV_unit(
     // TODO: port declaration
-    mul_clk, mul_rst_n, trigger, ready_output, mode, mul_rs1, mul_rs2, mul_wdata
+    mul_clk, mul_rst_n, valid, ready_output, mode, mul_rs1, mul_rs2, mul_wdata
     );
+
     parameter len = 32;
-    //trigger means the muldiv_unit should work now
-    input mul_clk, mul_rst_n, trigger;
+    //valid means the muldiv_unit should work now
+    input mul_clk, mul_rst_n, valid;
     //mode would be shift left, div, mul, and idle
     //mul: 0, div: 1, shift left: 2, idle: 3
     input [1:0] mode;
@@ -209,8 +224,9 @@ module MULDIV_unit(
     output [2*len-1:0] mul_wdata;
     //output the ready signal
     output ready_output;
-    
+
     // Todo: HW2
+
 endmodule
 
 module Cache#(
