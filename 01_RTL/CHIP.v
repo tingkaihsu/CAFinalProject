@@ -110,7 +110,8 @@ module CHIP #(                                                                  
         reg [4:0] RS1, RS2, RD;
         reg[BIT_W-1:0] immd;
         wire [4:0] rs1_wr, rs2_wr, rd_wr;//to Reg_file, which is wire
-        wire[BIT_W-1:0] WRITE_DATA, RS1_DATA, RS2_DATA;//to Reg_file, which is wire
+        wire[BIT_W-1:0] RS1_DATA, RS2_DATA;//to Reg_file, which is wire
+        reg[BIT_W-1:0] WRITE_DATA;
         reg write_to_reg;//needs to write back to reg like ALU and LW, 0 for no, 1 for yes
 
         //MULDIV-unit declaration
@@ -208,7 +209,10 @@ module CHIP #(                                                                  
             //memory default
             immd = 0;
             dmem_wdata = 0;
+            dmem_rdata = 0;
             dmem_addr = 0;
+            dmem_cen = 0;
+            dmem_wen = 0;
             if (opcode == LW) begin
                 //set the immediate
                 immd = instr[BIT_W-1:20];
@@ -250,14 +254,51 @@ module CHIP #(                                                                  
             //memory default
             immd = 0;
             dmem_wdata = 0;
+            dmem_rdata = 0;
             dmem_addr = 0;
+            dmem_cen = 0;
+            dmem_wen = 0;
             //decode the cases
             case (opcode)
+                ASXA:;
+                IMMD:;
+                LW:;
+                SW:;
+                BRNCH:;
+                MULDIV:;
                 AUIPC:;
+                JAL:;
+                JALR:;
+                ECALL:;
                 default:; 
             endcase
 
 
+        end
+        else begin
+            //this is made for avoiding latch
+            next_PC = 0;
+            finish = 0;
+            write_to_reg = 0;
+            //mul div
+            mul_valid = 0;
+            mul_mode = 0;
+            mul_rs1 = 0;
+            mul_rs2 = 0;
+            //decoding
+            opcode = 0;
+            FUNC3 = 0;
+            FUNC7 = 0;
+            RS1 = 0;
+            RS2 = 0;
+            RD = 0;
+            //data memory
+            immd = 0;
+            dmem_wdata = 0;
+            dmem_rdata = 0;
+            dmem_addr = 0;
+            dmem_cen = 0;
+            dmem_wen = 0;
         end
     end
 endmodule
