@@ -96,9 +96,15 @@ module CHIP #(                                                                  
         reg[BIT_W-1:0] dmem_wdata, dmem_rdata, dmem_addr;
         //memory write data, memory read data, memory address
 
+        //decoded instruction
+        reg[BIT_W-1:0] instr;
+        reg[6:0] opcode;
+        reg[6:0] FUNC7;
+        reg[2:0] FUNC3;
         //use wire to in/output of register file
         //must create registers and its corresponding wires
         reg [4:0] RS1, RS2, RD;
+        reg[BIT_W-1:0] immd;
         wire [4:0] rs1_wr, rs2_wr, rd_wr;//to Reg_file, which is wire
         wire[BIT_W-1:0] WRITE_DATA, RS1_DATA, RS2_DATA;//to Reg_file, which is wire
         reg write_to_reg;//needs to write back to reg like ALU and LW, 0 for no, 1 for yes
@@ -106,7 +112,7 @@ module CHIP #(                                                                  
         //MULDIV-unit declaration
         //input of module can eat reg and wire
         //but output must connect to wire
-        reg mul_ready, mul_valid;
+        reg mul_valid;
         reg [BIT_W-1:0] mul_rs1;
         reg [BIT_W-1:0] mul_rs2;
         reg mul_mode;   //determine if mul or div
@@ -129,8 +135,8 @@ module CHIP #(                                                                  
     assign o_IMEM_cen = imem_cen;//tell instr mem to operate
     assign o_DMEM_cen = dmem_cen;//tell memory to operate
     assign o_DMEM_wen = dmem_wen;//tell memory to write, for store
-    assign o_DMEM_addr = dmem_addr;
-    assign o_DMEM_wdata = dmem_wdata;
+    assign o_DMEM_addr = dmem_addr;//data memory address
+    assign o_DMEM_wdata = dmem_wdata;//write data to data memory
     //attach input 
     assign mem_stall = i_DMEM_stall;//input -> wire so that we know when to stall
     
@@ -173,6 +179,53 @@ module CHIP #(                                                                  
         end
         else begin
             PC <= next_PC;
+        end
+    end
+    always @(*) begin
+        //set the instruction-memory-access-enable to 1
+        imem_cen = 1;
+        instr = i_IMEM_data; //read the instruction
+        if (mem_stall) begin
+            //if mem stall, we need to wait a cycle
+            next_PC = PC;
+            finish = 0;//no ready to finish
+            write_to_reg = 0;//no write to reg
+            mul_valid = 0;//no multiplication instr
+            mul_mode = 0;//initially set to mul
+            mul_rs1 = 0;//no mul input
+            mul_rs2 = 0;//no mul input
+            //decoding
+            opcode = instr[6:0];
+            FUNC3 = instr[14:12];
+            FUNC7 = instr[31:25];
+            RS1 = instr[19:15];
+            RS2 = instr[24:20];
+            RD = instr[11:7];
+            if (opcode == LW) begin
+                //set the immediate
+                immd = instr[BIT_W-1:20];
+                //set memory write data, don't care
+                dmem_wdata = 0;
+                //set memory address, which is offset + rs1 address
+                dmem_addr = RS1_DATA + $signed(immd);
+            end
+            else if(opcode == SW) begin
+                //set the immediate
+                immd = {instr[BIT_W-1:25], instr[11:7]};
+                //set memory write data to rs2 data
+                dmem_wdata = RS2_DATA;
+                //set memory address, which is offset + rs1
+                dmem_addr = RS1_DATA + $signed(immd);                
+            end
+            else begin
+                //set memory address to don't care
+                dmem_addr = 0;
+                dmem_wdata = 0;
+                immd = 0;
+            end
+        end
+        else if(i_rst_n) begin
+            
         end
     end
 endmodule
