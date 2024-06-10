@@ -54,6 +54,9 @@ module CHIP #(                                                                  
     parameter BRNCH = 7'b1100011;  //beq, bge, blt, bne
     parameter MULDIV = 7'b0110011;    //multiplication and division
     parameter ECALL = 7'b1110011;
+    parameter AUIPC = 7'b0010111;
+    parameter JAL = 7'b1101111;
+    parameter JALR = 7'b1100111;
     //function3 code of instructions
     parameter FUNC3_ADD = 3'b000;
     parameter FUNC3_SUB = 3'b000;
@@ -71,6 +74,7 @@ module CHIP #(                                                                  
     parameter FUNC3_BNE = 3'b001;
     parameter FUNC3_MUL = 3'b000;
     parameter FUNC3_DIV = 3'b100;
+    parameter FUNC3_JALR = 3'b000;
     parameter FUNC3_ECALL = 3'b000;
     //function7 code of instruction
     parameter FUNC7_ADD = 7'b0000000;
@@ -201,6 +205,10 @@ module CHIP #(                                                                  
             RS1 = instr[19:15];
             RS2 = instr[24:20];
             RD = instr[11:7];
+            //memory default
+            immd = 0;
+            dmem_wdata = 0;
+            dmem_addr = 0;
             if (opcode == LW) begin
                 //set the immediate
                 immd = instr[BIT_W-1:20];
@@ -225,7 +233,31 @@ module CHIP #(                                                                  
             end
         end
         else if(i_rst_n) begin
-            
+            next_PC = PC+4;//first assume no branch
+            finish = 0;//no ready to finish
+            write_to_reg = 0;//no write to reg
+            mul_valid = 0;//no multiplication instr
+            mul_mode = 0;//initially set to mul
+            mul_rs1 = 0;//no mul input
+            mul_rs2 = 0;//no mul input
+            //decoding
+            opcode = instr[6:0];
+            FUNC3 = instr[14:12];
+            FUNC7 = instr[BIT_W-1:25];
+            RS1 = instr[19:15];
+            RS2 = instr[24:20];
+            RD = instr[11:7];
+            //memory default
+            immd = 0;
+            dmem_wdata = 0;
+            dmem_addr = 0;
+            //decode the cases
+            case (opcode)
+                AUIPC:;
+                default:; 
+            endcase
+
+
         end
     end
 endmodule
