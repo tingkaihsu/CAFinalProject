@@ -108,7 +108,8 @@ module CHIP #(                                                                  
         //use wire to in/output of register file
         //must create registers and its corresponding wires
         reg [4:0] RS1, RS2, RD;
-        reg[BIT_W-1:0] immd;
+        reg [BIT_W-1:0] temp_result;
+        reg [BIT_W-1:0] immd;
         wire [4:0] rs1_wr, rs2_wr, rd_wr;//to Reg_file, which is wire
         wire[BIT_W-1:0] RS1_DATA, RS2_DATA;//to Reg_file, which is wire
         reg[BIT_W-1:0] WRITE_DATA;
@@ -260,8 +261,67 @@ module CHIP #(                                                                  
             dmem_wen = 0;
             //decode the cases
             case (opcode)
-                ASXA:;
-                IMMD:;
+                ASXA: begin
+                    //we need further specify the instr
+                    case ({FUNC3, FUNC7})
+                        {FUNC3_ADD, FUNC7_ADD}: begin
+                            //write back to register
+                            write_to_reg = 1;
+                            //dealing with overflow
+                            temp_result = RS1_DATA + RS2_DATA;
+                            if ((temp_result[BIT_W-1]==1) && RS1_DATA[BIT_W-1]==0 && RS2_DATA[BIT_W-1]==0) temp_result = 2**31 - 1;//++=-
+                            else begin
+                                if (temp_result[BIT_W-1]==0 && RS1_DATA[BIT_W-1]==1 && RS2_DATA[BIT_W-1]==1) temp_result = -2**31;//--=+
+                                else ;//avoid latch
+                            end
+                            //then we have to cut off the result from 64 bits to 32 bits
+                            WRITE_DATA = temp_result;
+                        end 
+                        {FUNC3_SUB, FUNC7_SUB}: begin
+                            //write back to register
+                            write_to_reg = 1;
+                            temp_result = RS1_DATA - RS2_DATA;
+                            if ((temp_result[BIT_W-1]==0) && RS1_DATA[BIT_W-1]==1 && RS2_DATA[BIT_W-1]==0) temp_result = -2**31;//-+=+
+                            else begin
+                                if ((temp_result[BIT_W-1]==1) && RS1_DATA[BIT_W-1]==0 && RS2_DATA[BIT_W-1]==1) temp_result = 2**31-1;//+-=-
+                                else ;//avoid latch
+                            end
+                            //then we have to cut off the result from 64 bits to 32 bits
+                            WRITE_DATA = temp_result;
+                        end
+                        {FUNC3_AND, FUNC7_AND}: begin
+                            //write back to register
+                            write_to_reg = 1;
+                            WRITE_DATA = RS1_DATA & RS2_DATA;
+                        end
+                        {FUNC3_XOR, FUNC7_XOR}: begin
+                            write_to_reg = 1;
+                            WRITE_DATA = RS1_DATA ^ RS2_DATA;
+                        end
+                        {FUNC3_MUL, FUNC7_MUL}: begin
+                            ;
+                        end
+                        {FUNC3_DIV, FUNC7_DIV}: begin
+                            ;
+                        end
+                        default: begin
+                            //default setting
+                            next_PC = PC + 4;
+                            write_to_reg = 0;
+                            WRITE_DATA = 0;
+                        end 
+                    endcase
+                end
+                IMMD: begin
+                    //we need further specify instr
+                    case (FUNC3) 
+                        FUNC3_ADDI:;
+                        FUNC3_SLLI:;
+                        FUNC3_SLTI:;
+                        FUNC3_SRAI:;
+                        default:; 
+                    endcase
+                end
                 LW:;
                 SW:;
                 BRNCH:;
@@ -386,7 +446,7 @@ module MULDIV_unit(
     reg [len-1:0] operand_b, operand_b_nxt;
     reg mode, mode_nxt;
     reg [2*len-1:0] out_result; //this would finally connect to output
-    reg [2*len:0] temp_result;  //this would deal with overflow prob
+    reg [2*len:0] mul_temp_result;  //this would deal with overflow prob
     //counter
     reg [4:0] cnt;
     reg ready_to_output;
@@ -420,29 +480,29 @@ module MULDIV_unit(
     always @(cnt) begin
         if (mode == MUL) begin
             if (cnt <= 31 && cnt >= 0) begin
-                if (temp_result==0) temp_result = operand_b;
+                if (mul_temp_result==0) mul_temp_result = operand_b;
                 else ;
-                if (temp_result[0] == 1) temp_result[2*len: len] = temp_result[2*len-1:len] + operand_a;
+                if (mul_temp_result[0] == 1) mul_temp_result[2*len: len] = mul_temp_result[2*len-1:len] + operand_a;
                 else ;
-                temp_result = (temp_result >> 1);
+                mul_temp_result = (mul_temp_result >> 1);
             end
             else ;
         end
         else begin
             if (cnt <= 31 && cnt >= 0) begin
                 //initially, we copy dividend to temp_result
-                if (temp_result == 0) temp_result = (operand_a << 1);
+                if (mul_temp_result == 0) mul_temp_result = (operand_a << 1);
                 else ;
                 //first determine if the remainder > divisor or not
-                if (temp_result[2*len-1: len] < operand_b) temp_result = (temp_result << 1);
+                if (mul_temp_result[2*len-1: len] < operand_b) mul_temp_result = (mul_temp_result << 1);
                 else begin
-                    temp_result[2*len-1: len] = temp_result[2*len-1: len] - operand_b;
+                    mul_temp_result[2*len-1: len] = mul_temp_result[2*len-1: len] - operand_b;
                     //shift the whole result left 1 bit
-                    temp_result = (temp_result << 1);
-                    temp_result[0] = 1;
+                    mul_temp_result = (mul_temp_result << 1);
+                    mul_temp_result[0] = 1;
                 end
                 if (cnt == 31) begin
-                    temp_result[2*len: len] = (temp_result[2*len: len] >> 1);
+                    mul_temp_result[2*len: len] = (mul_temp_result[2*len: len] >> 1);
                 end
                 else ;
             end
