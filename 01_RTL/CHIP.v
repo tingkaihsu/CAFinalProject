@@ -170,15 +170,9 @@ module CHIP #(                                                                  
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin//reset everything
             PC <= 32'h00010000; // Do not modify this value!!!
-            state <= S_IDLE;
-            mem_cen <= 0;
-            mem_wen <= 0;
         end
         else begin
             PC <= next_PC;
-            state <= state_nxt;
-            mem_cen <= mem_cen_nxt;
-            mem_wen <= mem_wen_nxt;
         end
     end
 endmodule
