@@ -266,9 +266,27 @@ module CHIP #(                                                                  
                 SW:;
                 BRNCH:;
                 MULDIV:;
-                AUIPC:;
-                JAL:;
-                JALR:;
+                AUIPC: begin
+                    write_to_reg = 1;//we need to write back to rd
+                    //put usigned 20 bit of immd to leftmost, remaining 12 bits are 0
+                    immd[BIT_W:12] = instr[BIT_W-1:12];
+                    WRITE_DATA = PC + immd;
+                    // WRITE_DATA = PC + {instr[BIT_W-1:12], 12'b0};
+                end
+                JAL: begin
+                    //we store the next instr at rd
+                    WRITE_DATA = PC+4;
+                    write_to_reg = 1;
+                    immd = {instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0};
+                    next_PC = $signed(PC) + $signed(immd);
+                end
+                JALR: begin
+                    //we store the next instr at rd
+                    write_to_reg = 1;
+                    WRITE_DATA = PC+4;
+                    immd[11:0] = instr[BIT_W-1:20];
+                    next_PC = $signed(PC) + $signed(immd);
+                end
                 ECALL:;
                 default:; 
             endcase
