@@ -315,11 +315,34 @@ module CHIP #(                                                                  
                 IMMD: begin
                     //we need further specify instr
                     case (FUNC3) 
-                        FUNC3_ADDI:;
-                        FUNC3_SLLI:;
-                        FUNC3_SLTI:;
-                        FUNC3_SRAI:;
-                        default:; 
+                        FUNC3_ADDI: begin
+                            write_to_reg = 1;
+                            immd = instr[BIT_W-1:20];
+                            //should deal with overflow
+                            WRITE_DATA = $signed(RS1_DATA) + $signed(immd);
+                        end
+                        FUNC3_SLLI: begin
+                            write_to_reg = 1;
+                            immd = instr[24:20];
+                            WRITE_DATA = RS1_DATA << $unsigned(immd);
+                        end
+                        FUNC3_SLTI: begin
+                            write_to_reg = 1;
+                            immd = instr[24:20];
+                            //if rs1 < immd, then output 1 if not output 0
+                            WRITE_DATA = ($signed(RS1_DATA) < $signed(immd))? 1:0;
+                        end
+                        FUNC3_SRAI: begin
+                            write_to_reg = 1;
+                            immd = instr[24:20];
+                            WRITE_DATA = RS1_DATA >> $unsigned(immd);
+                        end
+                        default: begin
+                            next_PC = PC + 4;
+                            write_to_reg = 0;
+                            WRITE_DATA = 0;
+                            immd = 0;
+                        end
                     endcase
                 end
                 LW:;
