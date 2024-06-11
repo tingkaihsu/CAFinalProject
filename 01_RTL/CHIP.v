@@ -198,7 +198,7 @@ module CHIP #(                                                                  
 
     //stall counter counts when LW or SW
     always @(posedge i_clk) begin
-        if ( ((opcode == LW && FUNC3 == FUNC3_LW) || (opcode == SW && FUNC3 == FUNC3_SW)) && dmem_stall == 1) begin
+        if ( ((opcode == LW && FUNC3 == FUNC3_LW) || (opcode == SW && FUNC3 == FUNC3_SW)) && dmem_stall) begin
             stall_counter = stall_counter + 1;
         end    
         else stall_counter = 0;
@@ -270,10 +270,11 @@ module CHIP #(                                                                  
             RS1 = instr[19:15];
             RS2 = instr[24:20];
             RD = instr[11:7];
+            WRITE_DATA = 0;
             //memory default
             immd = 0;
             dmem_wdata = 0;
-            dmem_rdata = i_DMEM_rdata;
+            dmem_rdata = 0;
             dmem_addr = 0;
             //turn off enable signal
             dmem_cen_nxt = 0;
@@ -316,12 +317,6 @@ module CHIP #(                                                                  
                         {FUNC3_XOR, FUNC7_XOR}: begin
                             write_to_reg = 1;
                             WRITE_DATA = RS1_DATA ^ RS2_DATA;
-                        end
-                        {FUNC3_MUL, FUNC7_MUL}: begin
-                            ;
-                        end
-                        {FUNC3_DIV, FUNC7_DIV}: begin
-                            ;
                         end
                         default: begin
                             //default setting
@@ -370,7 +365,7 @@ module CHIP #(                                                                  
                     dmem_addr = RS1_DATA + $signed(immd);
                     //load would have stall, must check it
                     if (!dmem_stall && stall_counter > 0) begin
-                        next_PC = PC+4;
+                        // next_PC = PC+4;
                         //write back to reg
                         write_to_reg = 1;
                         WRITE_DATA = dmem_rdata;
@@ -396,9 +391,6 @@ module CHIP #(                                                                  
                     WRITE_DATA = RS2_DATA;
                     dmem_addr = RS1_DATA + $signed(immd);
                     if(!dmem_stall && stall_counter > 0) begin
-                        dmem_addr = 0;
-                        next_PC = PC+4;
-                        WRITE_DATA = 0;
                         //turn off enable signal
                         dmem_cen_nxt = 0;
                         dmem_wen_nxt = 0;
@@ -436,7 +428,25 @@ module CHIP #(                                                                  
                         default: next_PC = PC + 4;
                     endcase
                 end
-                MULDIV:;
+                MULDIV: begin
+                    write_to_reg = 0;
+                    mul_rs1 = RS1_DATA;
+                    mul_rs2 = RS2_DATA;
+                    if (mul_ready_output) begin
+                        next_PC = PC + 4;
+                        //ready to output and write to reg
+                        write_to_reg = 1;
+                        mul_mode = 0;
+                        mul_valid = 0;
+                    end
+                    else begin
+                        next_PC = PC;
+                        mul_mode = 0;
+                        mul_valid = 1;
+                        write_to_reg = 0;
+                    end
+                    WRITE_DATA = mul_wdata[BIT_W-1:0];
+                end
                 AUIPC: begin
                     write_to_reg = 1;//we need to write back to rd
                     //put usigned 20 bit of immd to leftmost, remaining 12 bits are 0
