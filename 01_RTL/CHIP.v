@@ -236,8 +236,8 @@ module CHIP #(                                                                  
 
         if(!dmem_stall) begin
             //decode the cases
-            $display("PC: %d", PC);
-            $display("next_PC: %d", next_PC);
+            $display("PC: %h", PC);
+            $display("next_PC: %h", next_PC);
             $display("instr: %h", instr);
             $display("opcode: %h", opcode);
             case (opcode)
@@ -365,30 +365,30 @@ module CHIP #(                                                                  
                 //         dmem_wen_nxt = 1;
                 //     end
                 // end
-                // BRNCH: begin
-                //     //the position of immd is same
-                //     immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
-                //     case (FUNC3)
-                //         FUNC3_BEQ: begin
-                //             if (RS1_DATA == RS2_DATA) next_PC = PC + $signed(immd);//branch
-                //             else next_PC = PC + 4;
-                //         end
-                //         FUNC3_BGE: begin
-                //             //do signed compared
-                //             if ($signed(RS1_DATA) >= $signed(RS2_DATA)) next_PC = PC + $signed(immd);
-                //             else next_PC = PC + 4;
-                //         end
-                //         FUNC3_BLT: begin
-                //             if ($signed(RS1_DATA) < $signed(RS2_DATA)) next_PC = PC + $signed(immd);
-                //             else next_PC = PC + 4;
-                //         end
-                //         FUNC3_BNE: begin
-                //             if (RS1_DATA != RS2_DATA) next_PC = PC + $signed(immd);
-                //             else next_PC = PC + 4;
-                //         end
-                //         default: next_PC = PC + 4;
-                //     endcase
-                // end
+                BRNCH: begin
+                    //the position of immd is same
+                    immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
+                    case (FUNC3)
+                        FUNC3_BEQ: begin
+                            if (RS1_DATA == RS2_DATA) next_PC = $signed(PC) + $signed(immd);//branch
+                            else next_PC = PC + 4;
+                        end
+                        FUNC3_BGE: begin
+                            //do signed compared
+                            if ($signed(RS1_DATA) >= $signed(RS2_DATA)) next_PC = $signed(PC) + $signed(immd);
+                            else next_PC = PC + 4;
+                        end
+                        FUNC3_BLT: begin
+                            if ($signed(RS1_DATA) < $signed(RS2_DATA)) next_PC = $signed(PC) + $signed(immd);
+                            else next_PC = PC + 4;
+                        end
+                        FUNC3_BNE: begin
+                            if (RS1_DATA != RS2_DATA) next_PC = $signed(PC) + $signed(immd);
+                            else next_PC = PC + 4;
+                        end
+                        default: next_PC = PC + 4;
+                    endcase
+                end
                 MULDIV: begin
                     write_to_reg = 0;
                     mul_rs1 = RS1_DATA;
@@ -420,16 +420,15 @@ module CHIP #(                                                                  
                     WRITE_DATA = PC+4;
                     write_to_reg = 1;
                     immd = {instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0};
-                    // next_PC = $signed(PC) + $signed(immd);
-                    next_PC = PC + 4;
+                    // immd = immd << 1;
+                    next_PC = $signed(PC) + $signed({instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0});
                 end
                 JALR: begin
                     //we store the next instr at rd
                     write_to_reg = 1;
                     WRITE_DATA = PC+4;
                     immd[11:0] = instr[BIT_W-1:20];
-                    // next_PC = $signed(PC) + $signed(immd);
-                    next_PC = PC + 4;
+                    next_PC = $signed(RS1_DATA) + $signed(immd);
                 end
                 ECALL: begin
                     write_to_reg = 0;
