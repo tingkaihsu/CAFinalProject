@@ -91,11 +91,15 @@ module CHIP #(                                                                  
     
     // TODO: any declaration
         reg [BIT_W-1:0] PC, next_PC;
-        wire mem_stall; //data mem stall, which should be connected to the input
-        
+        wire dmem_stall; //data mem stall, which should be connected to the input
+        reg[3:0] stall_counter; //counte the stall
+
         reg imem_cen;   //instruction mem enable
         reg dmem_cen;   //data mem enable 
         reg dmem_wen;   //data mem write enable
+        //we found out enable signal should be sequential
+        reg dmem_wen_nxt;
+        reg dmem_cen_nxt;
         reg finish;     //finish signal, ready to output
         reg[BIT_W-1:0] dmem_wdata, dmem_rdata, dmem_addr;
         //memory write data, memory read data, memory address
@@ -144,7 +148,7 @@ module CHIP #(                                                                  
     assign o_DMEM_addr = dmem_addr;//data memory address
     assign o_DMEM_wdata = dmem_wdata;//write data to data memory
     //attach input 
-    assign mem_stall = i_DMEM_stall;//input -> wire so that we know when to stall
+    assign dmem_stall = i_DMEM_stall;//input -> wire so that we know when to stall
     
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -191,7 +195,7 @@ module CHIP #(                                                                  
         //set the instruction-memory-access-enable to 1
         imem_cen = 1;
         instr = i_IMEM_data; //read the instruction
-        if (mem_stall) begin
+        if (dmem_stall) begin
             //if mem stall, we need to wait a cycle
             next_PC = PC;
             finish = 0;//no ready to finish
@@ -212,8 +216,9 @@ module CHIP #(                                                                  
             dmem_wdata = 0;
             dmem_rdata = 0;
             dmem_addr = 0;
-            dmem_cen = 0;
-            dmem_wen = 0;
+            //turn off enable signal
+            dmem_cen_nxt = 0;
+            dmem_wen_nxt = 0;
             if (opcode == LW) begin
                 //set the immediate
                 immd = instr[BIT_W-1:20];
@@ -255,10 +260,11 @@ module CHIP #(                                                                  
             //memory default
             immd = 0;
             dmem_wdata = 0;
-            dmem_rdata = 0;
+            dmem_rdata = i_DMEM_rdata;
             dmem_addr = 0;
-            dmem_cen = 0;
-            dmem_wen = 0;
+            //turn off enable signal
+            dmem_cen_nxt = 0;
+            dmem_wen_nxt = 0;
             //decode the cases
             case (opcode)
                 ASXA: begin
@@ -338,6 +344,7 @@ module CHIP #(                                                                  
                             WRITE_DATA = RS1_DATA >> $unsigned(immd);
                         end
                         default: begin
+                            //do nothing
                             next_PC = PC + 4;
                             write_to_reg = 0;
                             WRITE_DATA = 0;
@@ -345,8 +352,53 @@ module CHIP #(                                                                  
                         end
                     endcase
                 end
-                LW:;
-                SW:;
+                LW: begin
+                    immd = instr[BIT_W-1:20];
+                    dmem_addr = RS1_DATA + $signed(immd);
+                    //load would have stall, must check it
+                    if (!dmem_stall && stall_counter > 0) begin
+                        next_PC = PC+4;
+                        //write back to reg
+                        write_to_reg = 1;
+                        WRITE_DATA = dmem_rdata;
+                        //turn off enable signal
+                        dmem_wen_nxt = 0;
+                        dmem_cen_nxt = 0;
+                    end
+                    else begin
+                        write_to_reg = 0;
+                        WRITE_DATA = 0;
+                        //stall a cycle 
+                        //prepare to load data from mem
+                        next_PC = PC;
+                        //turn on enable signal, no write enable signal
+                        dmem_wen_nxt = 0;
+                        dmem_cen_nxt = 1;
+                    end
+                end
+                SW: begin
+                    immd = {instr[BIT_W-1:25], instr[11:7]};
+                    //no need to write back to reg
+                    write_to_reg = 0;
+                    WRITE_DATA = RS2_DATA;
+                    dmem_addr = RS1_DATA + $signed(immd);
+                    if(!dmem_stall && stall_counter > 0) begin
+                        dmem_addr = 0;
+                        next_PC = PC+4;
+                        WRITE_DATA = 0;
+                        //turn off enable signal
+                        dmem_cen_nxt = 0;
+                        dmem_wen_nxt = 0;
+                    end
+                    else begin
+                        //stall a cycle
+                        //prepare to write to mem
+                        next_PC = PC;
+                        //turn on enable signal
+                        dmem_cen_nxt = 1;
+                        dmem_wen_nxt = 1;
+                    end
+                end
                 BRNCH:;
                 MULDIV:;
                 AUIPC: begin
