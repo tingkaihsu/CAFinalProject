@@ -208,30 +208,37 @@ module CHIP #(                                                                  
         //set the instruction-memory-access-enable to 1
         imem_cen = 1;
         instr = i_IMEM_data; //read the instruction
+
+        $display("PC: %d", PC);
+        $display("next_PC %d", next_PC);
+        $display("instr %h", instr);
+        next_PC = (dmem_stall)? PC:PC+4;
+
+        finish = 0;//no finish
+        write_to_reg = 0;//no write back to reg
+        //mul
+        mul_valid = 0;//no multiplication instr
+        mul_mode = 0;//initially set to mul
+        mul_rs1 = 0;//no mul input
+        mul_rs2 = 0;//no mul input
+        //decoding
+        opcode = instr[6:0];
+        FUNC3 = instr[14:12];
+        FUNC7 = instr[BIT_W-1:25];
+        RS1 = instr[19:15];
+        RS2 = instr[24:20];
+        RD = instr[11:7];
+        //no write data
+        WRITE_DATA = 0;
+        immd = 0;
+        dmem_wdata = 0;
+        dmem_rdata = 0;
+        dmem_addr = 0;
+        //turn off enable signal
+        dmem_cen_nxt = 0;
+        dmem_wen_nxt = 0;
+
         if (dmem_stall) begin
-            //if mem stall, we need to wait a cycle
-            next_PC = PC;
-            finish = 0;//no ready to finish
-            write_to_reg = 0;//no write to reg
-            mul_valid = 0;//no multiplication instr
-            mul_mode = 0;//initially set to mul
-            mul_rs1 = 0;//no mul input
-            mul_rs2 = 0;//no mul input
-            //decoding
-            opcode = instr[6:0];
-            FUNC3 = instr[14:12];
-            FUNC7 = instr[31:25];
-            RS1 = instr[19:15];
-            RS2 = instr[24:20];
-            RD = instr[11:7];
-            //memory default
-            immd = 0;
-            dmem_wdata = 0;
-            dmem_rdata = 0;
-            dmem_addr = 0;
-            //turn off enable signal
-            dmem_cen_nxt = 0;
-            dmem_wen_nxt = 0;
             if (opcode == LW) begin
                 //set the immediate
                 immd = instr[BIT_W-1:20];
@@ -256,29 +263,6 @@ module CHIP #(                                                                  
             end
         end
         else if(i_rst_n) begin
-            next_PC = PC+4;//first assume no branch
-            finish = 0;//no ready to finish
-            write_to_reg = 0;//no write to reg
-            mul_valid = 0;//no multiplication instr
-            mul_mode = 0;//initially set to mul
-            mul_rs1 = 0;//no mul input
-            mul_rs2 = 0;//no mul input
-            //decoding
-            opcode = instr[6:0];
-            FUNC3 = instr[14:12];
-            FUNC7 = instr[BIT_W-1:25];
-            RS1 = instr[19:15];
-            RS2 = instr[24:20];
-            RD = instr[11:7];
-            WRITE_DATA = 0;
-            //memory default
-            immd = 0;
-            dmem_wdata = 0;
-            dmem_rdata = 0;
-            dmem_addr = 0;
-            //turn off enable signal
-            dmem_cen_nxt = 0;
-            dmem_wen_nxt = 0;
             //decode the cases
             case (opcode)
                 ASXA: begin
@@ -365,7 +349,7 @@ module CHIP #(                                                                  
                     dmem_addr = RS1_DATA + $signed(immd);
                     //load would have stall, must check it
                     if (!dmem_stall && stall_counter > 0) begin
-                        // next_PC = PC+4;
+                        next_PC = PC+4;
                         //write back to reg
                         write_to_reg = 1;
                         WRITE_DATA = dmem_rdata;
@@ -376,7 +360,7 @@ module CHIP #(                                                                  
                     else begin
                         write_to_reg = 0;
                         WRITE_DATA = 0;
-                        //stall a cycle 
+                        //stall
                         //prepare to load data from mem
                         next_PC = PC;
                         //turn on enable signal, no write enable signal
@@ -391,12 +375,13 @@ module CHIP #(                                                                  
                     WRITE_DATA = RS2_DATA;
                     dmem_addr = RS1_DATA + $signed(immd);
                     if(!dmem_stall && stall_counter > 0) begin
+                        next_PC = PC + 4;
                         //turn off enable signal
                         dmem_cen_nxt = 0;
                         dmem_wen_nxt = 0;
                     end
                     else begin
-                        //stall a cycle
+                        //stall
                         //prepare to write to mem
                         next_PC = PC;
                         //turn on enable signal
@@ -473,7 +458,7 @@ module CHIP #(                                                                  
                     finish = 1; //ready to output
                 end
                 default: begin
-                    next_PC = PC + 4;
+                    next_PC = PC;
                     write_to_reg = 0;
                     WRITE_DATA = 0;
                     immd = 0;
@@ -489,7 +474,7 @@ module CHIP #(                                                                  
         end
         else begin
             //this is made for avoiding latch
-            next_PC = 0;
+            next_PC = PC;
             finish = 0;
             write_to_reg = 0;
             //mul div
