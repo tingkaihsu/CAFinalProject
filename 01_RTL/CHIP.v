@@ -186,11 +186,24 @@ module CHIP #(                                                                  
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin//reset everything
             PC <= 32'h00010000; // Do not modify this value!!!
+            dmem_cen <= 0;   //reset enable signal
+            dmem_wen <= 0;   //reset enable signal
         end
         else begin
             PC <= next_PC;
+            dmem_cen <= dmem_cen_nxt;
+            dmem_wen <= dmem_wen_nxt;
         end
     end
+
+    //stall counter counts when LW or SW
+    always @(posedge i_clk) begin
+        if ( ((opcode == LW && FUNC3 == FUNC3_LW) || (opcode == SW && FUNC3 == FUNC3_SW)) && dmem_stall == 1) begin
+            stall_counter = stall_counter + 1;
+        end    
+        else stall_counter = 0;
+    end
+
     always @(*) begin
         //set the instruction-memory-access-enable to 1
         imem_cen = 1;
