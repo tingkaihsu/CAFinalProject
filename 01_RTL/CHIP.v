@@ -320,30 +320,27 @@ module CHIP #(                                                                  
                         end
                     endcase
                 end
-                // LW: begin
-                //     immd = instr[BIT_W-1:20];
-                //     dmem_addr = RS1_DATA + $signed(immd);
-                //     //load would have stall, must check it
-                //     if (!dmem_stall && stall_counter > 0) begin
-                //         next_PC = PC+4;
-                //         //write back to reg
-                //         write_to_reg = 1;
-                //         WRITE_DATA = dmem_rdata;
-                //         //turn off enable signal
-                //         dmem_wen_nxt = 0;
-                //         dmem_cen_nxt = 0;
-                //     end
-                //     else begin
-                //         write_to_reg = 0;
-                //         WRITE_DATA = 0;
-                //         //stall
-                //         //prepare to load data from mem
-                //         next_PC = PC;
-                //         //turn on enable signal, no write enable signal
-                //         dmem_wen_nxt = 0;
-                //         dmem_cen_nxt = 1;
-                //     end
-                // end
+                LW: begin
+                    immd = instr[BIT_W-1:20];
+                    dmem_addr = $signed(RS1_DATA) + $signed(immd);
+                    write_to_reg = 1;
+                    //load would have stall, must check it
+                    if (stall_counter > 0) begin
+                        //write back to reg
+                        //turn off enable signal
+                        dmem_wen_nxt = 0;
+                        dmem_cen_nxt = 0;
+                    end
+                    else begin
+                        //stall
+                        //prepare to load data from mem
+                        next_PC = PC;
+                        //turn on enable signal, no write enable signal
+                        dmem_wen_nxt = 0;
+                        dmem_cen_nxt = 1;
+                    end
+                    WRITE_DATA = dmem_rdata; 
+                end
                 // SW: begin
                 //     immd = {instr[BIT_W-1:25], instr[11:7]};
                 //     //no need to write back to reg
