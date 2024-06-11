@@ -236,10 +236,10 @@ module CHIP #(                                                                  
 
         if(!dmem_stall) begin
             //decode the cases
-            $display("PC: %h", PC);
-            $display("next_PC: %h", next_PC);
-            $display("instr: %h", instr);
-            $display("opcode: %h", opcode);
+            // $display("PC: %h", PC);
+            // $display("next_PC: %h", next_PC);
+            // $display("instr: %h", instr);
+            // $display("opcode: %h", opcode);
             case (opcode)
                 ASXA: begin
                     //we need further specify the instr
