@@ -412,7 +412,17 @@ module CHIP #(                                                                  
                         dmem_wen_nxt = 1;
                     end
                 end
-                BRNCH:;
+                BRNCH: begin
+                    //the position of immd is same
+                    immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
+                    case (FUNC3)
+                        FUNC3_BEQ:;
+                        FUNC3_BGE:;
+                        FUNC3_BLT:;
+                        FUNC3_BNE:; 
+                        default:;
+                    endcase
+                end
                 MULDIV:;
                 AUIPC: begin
                     write_to_reg = 1;//we need to write back to rd
@@ -435,11 +445,24 @@ module CHIP #(                                                                  
                     immd[11:0] = instr[BIT_W-1:20];
                     next_PC = $signed(PC) + $signed(immd);
                 end
-                ECALL:;
-                default:; 
+                ECALL: begin
+                    write_to_reg = 0;
+                    finish = 1; //ready to output
+                end
+                default: begin
+                    next_PC = PC + 4;
+                    write_to_reg = 0;
+                    WRITE_DATA = 0;
+                    immd = 0;
+                    finish = 0;
+                    //mem
+                    dmem_addr = 0;
+                    dmem_wdata = 0;
+                    dmem_rdata = 0;
+                    dmem_cen_nxt = 0;
+                    dmem_wen_nxt = 0;
+                end
             endcase
-
-
         end
         else begin
             //this is made for avoiding latch
