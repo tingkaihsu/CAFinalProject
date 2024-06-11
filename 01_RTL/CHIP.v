@@ -440,7 +440,7 @@ module CHIP #(                                                                  
                 AUIPC: begin
                     write_to_reg = 1;//we need to write back to rd
                     //put usigned 20 bit of immd to leftmost, remaining 12 bits are 0
-                    immd[BIT_W:12] = instr[BIT_W-1:12];
+                    immd[BIT_W-1:12] = instr[BIT_W-1:12];
                     WRITE_DATA = PC + immd;
                     // WRITE_DATA = PC + {instr[BIT_W-1:12], 12'b0};
                 end
@@ -689,18 +689,5 @@ module Cache#(
     //------------------------------------------//
 
     // Todo: BONUS
-    // any declaration
-    reg [17:0] Tag; 				 
-    reg [7:0] Index; 				
-    reg [3:0] Byte_Offset;
-    reg [15:0] [31:0] Cache_Memory[256:0]; 		//a memory of registers 256 x 16 words ,where 1 word is 32 bits.
-    reg [17:0] Cache_Tags[256:0]; 	
-
-    //Sequential always block
-    always@(posedge i_clk)begin
-	        Tag = i_proc_addr[31:14];
-        	Index = i_proc_addr[13:6];
-	        Byte_Offset = i_proc_addr[5:2];
-        end
 
 endmodule
