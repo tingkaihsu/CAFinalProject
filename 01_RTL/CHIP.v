@@ -416,11 +416,24 @@ module CHIP #(                                                                  
                     //the position of immd is same
                     immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
                     case (FUNC3)
-                        FUNC3_BEQ:;
-                        FUNC3_BGE:;
-                        FUNC3_BLT:;
-                        FUNC3_BNE:; 
-                        default:;
+                        FUNC3_BEQ: begin
+                            if (RS1_DATA == RS2_DATA) next_PC = PC + $signed(immd);//branch
+                            else next_PC = PC + 4;
+                        end
+                        FUNC3_BGE: begin
+                            //do signed compared
+                            if ($signed(RS1_DATA) >= $signed(RS2_DATA)) next_PC = PC + $signed(immd);
+                            else next_PC = PC + 4;
+                        end
+                        FUNC3_BLT: begin
+                            if ($signed(RS1_DATA) < $signed(RS2_DATA)) next_PC = PC + $signed(immd);
+                            else next_PC = PC + 4;
+                        end
+                        FUNC3_BNE: begin
+                            if (RS1_DATA != RS2_DATA) next_PC = PC + $signed(immd);
+                            else next_PC = PC + 4;
+                        end
+                        default: next_PC = PC + 4;
                     endcase
                 end
                 MULDIV:;
