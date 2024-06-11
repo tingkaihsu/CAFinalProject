@@ -92,7 +92,7 @@ module CHIP #(                                                                  
     // TODO: any declaration
         reg [BIT_W-1:0] PC, next_PC;
         wire dmem_stall; //data mem stall, which should be connected to the input
-        reg[3:0] stall_counter; //count the stall
+        reg[BIT_W-1:0] stall_counter; //count the stall
 
         reg imem_cen;   //instruction mem enable
         reg dmem_cen;   //data mem enable 
@@ -340,6 +340,7 @@ module CHIP #(                                                                  
                         dmem_cen_nxt = 1;
                     end
                     WRITE_DATA = dmem_rdata; 
+                    next_PC = PC + 4;
                 end
                 // SW: begin
                 //     immd = {instr[BIT_W-1:25], instr[11:7]};
