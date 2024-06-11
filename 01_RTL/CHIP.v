@@ -342,27 +342,27 @@ module CHIP #(                                                                  
                     WRITE_DATA = dmem_rdata; 
                     next_PC = PC + 4;
                 end
-                // SW: begin
-                //     immd = {instr[BIT_W-1:25], instr[11:7]};
-                //     //no need to write back to reg
-                //     write_to_reg = 0;
-                //     WRITE_DATA = RS2_DATA;
-                //     dmem_addr = RS1_DATA + $signed(immd);
-                //     if(!dmem_stall && stall_counter > 0) begin
-                //         next_PC = PC + 4;
-                //         //turn off enable signal
-                //         dmem_cen_nxt = 0;
-                //         dmem_wen_nxt = 0;
-                //     end
-                //     else begin
-                //         //stall
-                //         //prepare to write to mem
-                //         next_PC = PC;
-                //         //turn on enable signal
-                //         dmem_cen_nxt = 1;
-                //         dmem_wen_nxt = 1;
-                //     end
-                // end
+                SW: begin
+                    immd = {instr[BIT_W-1:25], instr[11:7]};
+                    //no need to write back to reg
+                    write_to_reg = 0;
+                    dmem_addr = $signed(RS1_DATA) + $signed(immd);
+                    if(stall_counter > 0) begin
+                        //turn off enable signal
+                        dmem_cen_nxt = 0;
+                        dmem_wen_nxt = 0;
+                    end
+                    else begin
+                        //stall
+                        //prepare to write to mem
+                        next_PC = PC;
+                        //turn on enable signal
+                        dmem_cen_nxt = 1;
+                        dmem_wen_nxt = 1;
+                    end
+                    WRITE_DATA = RS2_DATA;
+                    next_PC = PC + 4;
+                end
                 BRNCH: begin
                     //the position of immd is same
                     immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
