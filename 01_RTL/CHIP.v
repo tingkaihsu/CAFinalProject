@@ -388,6 +388,7 @@ module CHIP #(                                                                  
                     endcase
                 end
                 MULDIV: begin
+                    $display("here is mul");
                     write_to_reg = 0;
                     mul_rs1 = RS1_DATA;
                     mul_rs2 = RS2_DATA;
