@@ -238,31 +238,31 @@ module CHIP #(                                                                  
         dmem_cen_nxt = 0;
         dmem_wen_nxt = 0;
 
-        if (dmem_stall) begin
-            if (opcode == LW) begin
-                //set the immediate
-                immd = instr[BIT_W-1:20];
-                //set memory write data, don't care
-                dmem_wdata = 0;
-                //set memory address, which is offset + rs1 address
-                dmem_addr = RS1_DATA + $signed(immd);
-            end
-            else if(opcode == SW) begin
-                //set the immediate
-                immd = {instr[BIT_W-1:25], instr[11:7]};
-                //set memory write data to rs2 data
-                dmem_wdata = RS2_DATA;
-                //set memory address, which is offset + rs1
-                dmem_addr = RS1_DATA + $signed(immd);                
-            end
-            else begin
-                //set memory address to don't care
-                dmem_addr = 0;
-                dmem_wdata = 0;
-                immd = 0;
-            end
-        end
-        else if(i_rst_n) begin
+        // if (dmem_stall) begin
+            // if (opcode == LW) begin
+            //     //set the immediate
+            //     immd = instr[BIT_W-1:20];
+            //     //set memory write data, don't care
+            //     dmem_wdata = 0;
+            //     //set memory address, which is offset + rs1 address
+            //     dmem_addr = RS1_DATA + $signed(immd);
+        //     end
+        //     else if(opcode == SW) begin
+        //         //set the immediate
+        //         immd = {instr[BIT_W-1:25], instr[11:7]};
+        //         //set memory write data to rs2 data
+        //         dmem_wdata = RS2_DATA;
+        //         //set memory address, which is offset + rs1
+        //         dmem_addr = RS1_DATA + $signed(immd);                
+        //     end
+        //     else begin
+        //         //set memory address to don't care
+        //         dmem_addr = 0;
+        //         dmem_wdata = 0;
+        //         immd = 0;
+        //     end
+        // end
+        if(!dmem_stall) begin
             //decode the cases
             case (opcode)
                 ASXA: begin
