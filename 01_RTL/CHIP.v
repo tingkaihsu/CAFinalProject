@@ -187,28 +187,28 @@ module CHIP #(                                                                  
     // Todo: any combinational/sequential circuit
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin//reset everything
-            PC <= 32'h00010000; // Do not modify this value!!!
-            dmem_cen <= 0;   //reset enable signal
-            dmem_wen <= 0;   //reset enable signal
-            state <= S_IDLE;
+            PC = 32'h00010000; // Do not modify this value!!!
+            dmem_cen = 0;   //reset enable signal
+            dmem_wen = 0;   //reset enable signal
+            state = S_IDLE;
         end
         else begin
-            PC <= next_PC;
-            dmem_cen <= dmem_cen_nxt;
-            dmem_wen <= dmem_wen_nxt;
-            state <= state_nxt;
+            PC = next_PC;
+            dmem_cen = dmem_cen_nxt;
+            dmem_wen = dmem_wen_nxt;
+            state = state_nxt;
         end
     end
-    //FSM 
+    // //FSM 
     always @(*) begin
         case(state)
             S_IDLE: begin
-                if (stall_counter || dmem_stall) state_nxt = S_IDLE;
+                if (stall_counter>1 || i_DMEM_stall) state_nxt = S_IDLE;
                 else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC; 
             end
             S_ONE_CYCLE_EXEC: begin
                 state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
-                if (dmem_stall) state_nxt = S_IDLE;
+                if (i_DMEM_stall) state_nxt = S_IDLE;
                 else state_nxt = state_nxt;
             end
             S_MULTI_CYCLE_EXEC: begin
@@ -221,8 +221,12 @@ module CHIP #(                                                                  
 
     //stall counter counts when LW or SW
     always @(posedge i_clk) begin
-        if ( ((opcode == LW && FUNC3 == FUNC3_LW) || (opcode == SW && FUNC3 == FUNC3_SW)) && dmem_stall) begin
+        // $display("opcode: %h", opcode);
+        // $display("dmem_stall %b!", dmem_stall);
+        // if (opcode == LW) $display("here is load, with dmem_stall %b!", dmem_stall);
+        if ( ((opcode == LW) || (opcode == SW)) && i_DMEM_stall == 1) begin
             stall_counter = stall_counter + 1;
+            // $display("stall counter trigger %h!", stall_counter);
         end    
         else stall_counter = 0;
     end
@@ -231,38 +235,32 @@ module CHIP #(                                                                  
         //set the instruction-memory-access-enable to 1
         imem_cen = 1;
         instr = i_IMEM_data; //read the instruction
-        next_PC = (dmem_stall)? PC:PC+4;
+        next_PC = (i_DMEM_stall)? PC:PC+4;
 
-        finish = 0;//no finish
-        write_to_reg = 0;//no write back to reg
-        //mul
-        mul_valid = 0;//no multiplication instr
-        mul_mode = 0;//initially set to mul
-        mul_rs1 = 0;//no mul input
-        mul_rs2 = 0;//no mul input
-        //decoding
-        opcode = instr[6:0];
-        FUNC3 = instr[14:12];
-        FUNC7 = instr[BIT_W-1:25];
-        RS1 = instr[19:15];
-        RS2 = instr[24:20];
-        RD = instr[11:7];
-        //no write data
-        WRITE_DATA = 0;
-        immd = 0;
-        dmem_wdata = 0;
-        dmem_rdata = 0;
-        dmem_addr = 0;
-        //turn off enable signal
-        dmem_cen_nxt = 0;
-        dmem_wen_nxt = 0;
-
-        if(!dmem_stall) begin
-            //decode the cases
-            // $display("PC: %h", PC);
-            // $display("next_PC: %h", next_PC);
-            // $display("instr: %h", instr);
-            // $display("opcode: %h", opcode);
+        if(!i_DMEM_stall) begin
+            //decode the casesfinish = 0;//no finish
+            write_to_reg = 0;//no write back to reg
+            //mul
+            mul_valid = 0;//no multiplication instr
+            mul_mode = 0;//initially set to mul
+            mul_rs1 = 0;//no mul input
+            mul_rs2 = 0;//no mul input
+            //decoding
+            opcode = instr[6:0];
+            FUNC3 = instr[14:12];
+            FUNC7 = instr[BIT_W-1:25];
+            RS1 = instr[19:15];
+            RS2 = instr[24:20];
+            RD = instr[11:7];
+            //no write data
+            WRITE_DATA = 0;
+            immd = 0;
+            dmem_wdata = 0;
+            dmem_rdata = 0;
+            dmem_addr = 0;
+            //turn off enable signal
+            dmem_cen_nxt = 0;
+            dmem_wen_nxt = 0;
             case (opcode)
                 ASXA: begin
                     //we need further specify the instr
@@ -351,13 +349,16 @@ module CHIP #(                                                                  
                 LW: begin
                     immd = instr[BIT_W-1:20];
                     dmem_addr = $signed(RS1_DATA) + $signed(immd);
-                    write_to_reg = 1;
                     //load would have stall, must check it
+                    // $display("stall counter: %h", stall_counter);
                     if (stall_counter > 0) begin
                         //write back to reg
                         //turn off enable signal
                         dmem_wen_nxt = 0;
                         dmem_cen_nxt = 0;
+                        write_to_reg = 1;
+                        WRITE_DATA = i_DMEM_rdata; 
+                        // $display("load value %h", WRITE_DATA);
                     end
                     else begin
                         //stall
@@ -367,7 +368,6 @@ module CHIP #(                                                                  
                         dmem_wen_nxt = 0;
                         dmem_cen_nxt = 1;
                     end
-                    WRITE_DATA = dmem_rdata; 
                     next_PC = PC + 4;
                 end
                 SW: begin
@@ -397,26 +397,30 @@ module CHIP #(                                                                  
                     case (FUNC3)
                         FUNC3_BEQ: begin
                             if (RS1_DATA == RS2_DATA) next_PC = $signed(PC) + $signed(immd);//branch
+                            // if (RS1_DATA == RS2_DATA) next_PC = PC + immd;
                             else next_PC = PC + 4;
                         end
                         FUNC3_BGE: begin
                             //do signed compared
                             if ($signed(RS1_DATA) >= $signed(RS2_DATA)) next_PC = $signed(PC) + $signed(immd);
+                            // if ($signed(RS1_DATA) >= $signed(RS2_DATA)) next_PC = PC + immd;
                             else next_PC = PC + 4;
                         end
                         FUNC3_BLT: begin
                             if ($signed(RS1_DATA) < $signed(RS2_DATA)) next_PC = $signed(PC) + $signed(immd);
+                            // if ($signed(RS1_DATA) < $signed(RS2_DATA)) next_PC = PC + immd;
                             else next_PC = PC + 4;
                         end
                         FUNC3_BNE: begin
                             if (RS1_DATA != RS2_DATA) next_PC = $signed(PC) + $signed(immd);
+                            // if (RS1_DATA != RS2_DATA) next_PC = PC + immd;
                             else next_PC = PC + 4;
                         end
                         default: next_PC = PC + 4;
                     endcase
                 end
                 MULDIV: begin
-                    $display("here is mul");
+                    // $display("here is mul");
                     write_to_reg = 0;
                     mul_rs1 = RS1_DATA;
                     mul_rs2 = RS2_DATA;
@@ -436,12 +440,12 @@ module CHIP #(                                                                  
                     WRITE_DATA = mul_wdata[BIT_W-1:0];
                 end
                 AUIPC: begin
-                    $display("here is auipc");
+                    // $display("here is auipc");
                     write_to_reg = 1;//we need to write back to rd
                     //put usigned 20 bit of immd to leftmost, remaining 12 bits are 0
                     immd = 0;
                     immd[BIT_W-1:12] = instr[BIT_W-1:12];
-                    WRITE_DATA = PC + immd;
+                    WRITE_DATA = $signed(PC) + $signed(immd);
                     // WRITE_DATA = PC + {instr[BIT_W-1:12], 12'b0};
                 end
                 JAL: begin
@@ -479,8 +483,10 @@ module CHIP #(                                                                  
             endcase
         end
         else begin
+            // $display("stall");
+            // $display("here opcode: %h", opcode);
             //this is made for avoiding latch
-            next_PC = PC+4;
+            next_PC = PC;
             finish = 0;
             write_to_reg = 0;
             //mul div
@@ -489,19 +495,29 @@ module CHIP #(                                                                  
             mul_rs1 = 0;
             mul_rs2 = 0;
             //decoding
-            opcode = 0;
-            FUNC3 = 0;
-            FUNC7 = 0;
-            RS1 = 0;
-            RS2 = 0;
-            RD = 0;
+            opcode = instr[6:0];
+            FUNC3 = instr[14:12];
+            FUNC7 = instr[BIT_W-1:25];
+            RS1 = instr[19:15];
+            RS2 = instr[24:20];
+            RD = instr[11:7];
+            WRITE_DATA = 0;
             //data memory
-            immd = 0;
-            dmem_wdata = 0;
+            dmem_wdata = RS2_DATA;
             dmem_rdata = 0;
-            dmem_addr = 0;
-            dmem_cen = 0;
-            dmem_wen = 0;
+            dmem_cen_nxt = 0;
+            dmem_wen_nxt = 0;
+            if (opcode == LW) begin
+                immd = instr[BIT_W-1:20];
+                dmem_addr = RS1_DATA + $signed(immd);
+                $display("dmem_stall %h", i_DMEM_stall);
+                $display("load %h", opcode);
+                $display("stall counter: %h", stall_counter);
+            end
+            else if (opcode == SW) begin
+                immd = {instr[BIT_W-1:25], instr[11:7]};
+                dmem_addr = RS1_DATA + $signed(immd);
+            end
         end
         // $display("result: %h", WRITE_DATA);
     end
