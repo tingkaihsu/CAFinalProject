@@ -85,6 +85,8 @@ module CHIP #(                                                                  
     parameter FUNC7_SRAI = 7'b0100000;
     parameter FUNC7_MUL = 7'b0000001;
     parameter FUNC7_DIV = 7'b0000001;
+
+    parameter S_IDLE = 0, S_ONE_CYCLE_EXEC = 1, S_MULTI_CYCLE_EXEC = 1;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Wires and Registers
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -129,7 +131,8 @@ module CHIP #(                                                                  
         //output
         wire [2*BIT_W-1:0] mul_wdata;
         wire mul_ready_output;
-
+        //FSM
+        reg [1:0] state, state_nxt;
         
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
@@ -150,7 +153,6 @@ module CHIP #(                                                                  
     //attach input 
     assign dmem_stall = i_DMEM_stall;//input -> wire so that we know when to stall
     
-
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submodules
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -188,12 +190,33 @@ module CHIP #(                                                                  
             PC <= 32'h00010000; // Do not modify this value!!!
             dmem_cen <= 0;   //reset enable signal
             dmem_wen <= 0;   //reset enable signal
+            state <= S_IDLE;
         end
         else begin
             PC <= next_PC;
             dmem_cen <= dmem_cen_nxt;
             dmem_wen <= dmem_wen_nxt;
+            state <= state_nxt;
         end
+    end
+    //FSM 
+    always @(*) begin
+        case(state)
+            S_IDLE: begin
+                if (stall_counter || dmem_stall) state_nxt = S_IDLE;
+                else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC; 
+            end
+            S_ONE_CYCLE_EXEC: begin
+                state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
+                if (dmem_stall) state_nxt = S_IDLE;
+                else state_nxt = state_nxt;
+            end
+            S_MULTI_CYCLE_EXEC: begin
+                if (mul_ready_output == 0) state_nxt = state;//multiplication not yet done
+                else state_nxt = S_ONE_CYCLE_EXEC;
+            end
+            default: state_nxt = state;
+        endcase
     end
 
     //stall counter counts when LW or SW
@@ -255,7 +278,8 @@ module CHIP #(                                                                  
                                 else ;//avoid latch
                             end
                             //then we have to cut off the result from 64 bits to 32 bits
-                            WRITE_DATA = temp_result;
+                            // WRITE_DATA = temp_result;
+                            WRITE_DATA = $signed(RS1_DATA) + $signed(RS2_DATA);
                         end 
                         {FUNC3_SUB, FUNC7_SUB}: begin
                             //write back to register
@@ -267,7 +291,8 @@ module CHIP #(                                                                  
                                 else ;//avoid latch
                             end
                             //then we have to cut off the result from 64 bits to 32 bits
-                            WRITE_DATA = temp_result;
+                            // WRITE_DATA = temp_result;
+                            WRITE_DATA = $signed(RS1_DATA) - $signed(RS2_DATA);
                         end
                         {FUNC3_AND, FUNC7_AND}: begin
                             //write back to register
@@ -292,8 +317,11 @@ module CHIP #(                                                                  
                         FUNC3_ADDI: begin
                             write_to_reg = 1;
                             immd = instr[BIT_W-1:20];
+                            // $display("here is addi");
                             //should deal with overflow
                             WRITE_DATA = $signed(RS1_DATA) + $signed(immd);
+                            // $display("addi result %h", WRITE_DATA);
+                            // WRITE_DATA = RS1_DATA + immd;
                         end
                         FUNC3_SLLI: begin
                             write_to_reg = 1;
@@ -302,7 +330,7 @@ module CHIP #(                                                                  
                         end
                         FUNC3_SLTI: begin
                             write_to_reg = 1;
-                            immd = instr[24:20];
+                            immd = instr[BIT_W-1:20];
                             //if rs1 < immd, then output 1 if not output 0
                             WRITE_DATA = ($signed(RS1_DATA) < $signed(immd))? 1:0;
                         end
@@ -408,8 +436,10 @@ module CHIP #(                                                                  
                     WRITE_DATA = mul_wdata[BIT_W-1:0];
                 end
                 AUIPC: begin
+                    $display("here is auipc");
                     write_to_reg = 1;//we need to write back to rd
                     //put usigned 20 bit of immd to leftmost, remaining 12 bits are 0
+                    immd = 0;
                     immd[BIT_W-1:12] = instr[BIT_W-1:12];
                     WRITE_DATA = PC + immd;
                     // WRITE_DATA = PC + {instr[BIT_W-1:12], 12'b0};
@@ -473,6 +503,7 @@ module CHIP #(                                                                  
             dmem_cen = 0;
             dmem_wen = 0;
         end
+        // $display("result: %h", WRITE_DATA);
     end
 endmodule
 
