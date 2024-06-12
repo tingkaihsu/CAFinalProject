@@ -187,37 +187,37 @@ module CHIP #(                                                                  
     // Todo: any combinational/sequential circuit
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin//reset everything
-            PC = 32'h00010000; // Do not modify this value!!!
-            dmem_cen = 0;   //reset enable signal
-            dmem_wen = 0;   //reset enable signal
-            state = S_IDLE;
+            PC <= 32'h00010000; // Do not modify this value!!!
+            dmem_cen <= 0;   //reset enable signal
+            dmem_wen <= 0;   //reset enable signal
+            // state = S_IDLE;
         end
         else begin
-            PC = next_PC;
-            dmem_cen = dmem_cen_nxt;
-            dmem_wen = dmem_wen_nxt;
-            state = state_nxt;
+            PC <= next_PC;
+            dmem_cen <= dmem_cen_nxt;
+            dmem_wen <= dmem_wen_nxt;
+            // state = state_nxt;
         end
     end
     // //FSM 
-    always @(*) begin
-        case(state)
-            S_IDLE: begin
-                if (stall_counter>1 || i_DMEM_stall) state_nxt = S_IDLE;
-                else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC; 
-            end
-            S_ONE_CYCLE_EXEC: begin
-                state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
-                if (i_DMEM_stall) state_nxt = S_IDLE;
-                else state_nxt = state_nxt;
-            end
-            S_MULTI_CYCLE_EXEC: begin
-                if (mul_ready_output == 0) state_nxt = state;//multiplication not yet done
-                else state_nxt = S_ONE_CYCLE_EXEC;
-            end
-            default: state_nxt = state;
-        endcase
-    end
+    // always @(*) begin
+    //     case(state)
+    //         S_IDLE: begin
+    //             if (stall_counter>1 || i_DMEM_stall) state_nxt = S_IDLE;
+    //             else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC; 
+    //         end
+    //         S_ONE_CYCLE_EXEC: begin
+    //             state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
+    //             if (i_DMEM_stall) state_nxt = S_IDLE;
+    //             else state_nxt = state_nxt;
+    //         end
+    //         S_MULTI_CYCLE_EXEC: begin
+    //             if (mul_ready_output == 0) state_nxt = state;//multiplication not yet done
+    //             else state_nxt = S_ONE_CYCLE_EXEC;
+    //         end
+    //         default: state_nxt = state;
+    //     endcase
+    // end
 
     //stall counter counts when LW or SW
     always @(posedge i_clk) begin
@@ -233,10 +233,10 @@ module CHIP #(                                                                  
 
     always @(*) begin
         //set the instruction-memory-access-enable to 1
-        imem_cen = 1;
+        imem_cen = (i_DMEM_stall)? 0:1;
         instr = i_IMEM_data; //read the instruction
         next_PC = (i_DMEM_stall)? PC:PC+4;
-
+        // if(i_DMEM_stall) $display("stall");
         if(!i_DMEM_stall) begin
             //decode the casesfinish = 0;//no finish
             write_to_reg = 0;//no write back to reg
@@ -351,14 +351,14 @@ module CHIP #(                                                                  
                     dmem_addr = $signed(RS1_DATA) + $signed(immd);
                     //load would have stall, must check it
                     // $display("stall counter: %h", stall_counter);
+                    WRITE_DATA = i_DMEM_rdata;
+                    write_to_reg = 1;
                     if (stall_counter > 0) begin
                         //write back to reg
                         //turn off enable signal
                         dmem_wen_nxt = 0;
                         dmem_cen_nxt = 0;
-                        write_to_reg = 1;
-                        WRITE_DATA = i_DMEM_rdata; 
-                        // $display("load value %h", WRITE_DATA);
+                        $display("load value %h", WRITE_DATA);
                     end
                     else begin
                         //stall
@@ -367,8 +367,8 @@ module CHIP #(                                                                  
                         //turn on enable signal, no write enable signal
                         dmem_wen_nxt = 0;
                         dmem_cen_nxt = 1;
-                    end
-                    next_PC = PC + 4;
+                    end 
+                    // next_PC = PC + 4;
                 end
                 SW: begin
                     immd = {instr[BIT_W-1:25], instr[11:7]};
@@ -510,9 +510,9 @@ module CHIP #(                                                                  
             if (opcode == LW) begin
                 immd = instr[BIT_W-1:20];
                 dmem_addr = RS1_DATA + $signed(immd);
-                $display("dmem_stall %h", i_DMEM_stall);
-                $display("load %h", opcode);
-                $display("stall counter: %h", stall_counter);
+                // $display("dmem_stall %h", i_DMEM_stall);
+                // $display("load %h", opcode);
+                // $display("stall counter: %h", stall_counter);
             end
             else if (opcode == SW) begin
                 immd = {instr[BIT_W-1:25], instr[11:7]};
