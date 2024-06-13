@@ -94,7 +94,8 @@ module CHIP #(                                                                  
     // TODO: any declaration
         reg [BIT_W-1:0] PC, next_PC;
         wire dmem_stall; //data mem stall, which should be connected to the input
-        reg[BIT_W-1:0] stall_counter; //count the stall
+        reg [BIT_W-1:0] stall_counter; //count the stall
+        // reg [BIT_W-1:0] mul_stall_counter;
 
         reg imem_cen;   //instruction mem enable
         reg dmem_cen;   //data mem enable 
@@ -103,22 +104,22 @@ module CHIP #(                                                                  
         reg dmem_wen_nxt;
         reg dmem_cen_nxt;
         reg finish;     //finish signal, ready to output
-        reg[BIT_W-1:0] dmem_wdata, dmem_rdata, dmem_addr;
+        reg [BIT_W-1:0] dmem_wdata, dmem_rdata, dmem_addr;
         //memory write data, memory read data, memory address
 
         //decoded instruction
-        reg[BIT_W-1:0] instr;
-        reg[6:0] opcode;
-        reg[6:0] FUNC7;
-        reg[2:0] FUNC3;
+        reg [BIT_W-1:0] instr;
+        reg [6:0] opcode;
+        reg [6:0] FUNC7;
+        reg [2:0] FUNC3;
         //use wire to in/output of register file
         //must create registers and its corresponding wires
         reg [4:0] RS1, RS2, RD;
         reg [BIT_W-1:0] temp_result;
         reg [BIT_W-1:0] immd;
         wire [4:0] rs1_wr, rs2_wr, rd_wr;//to Reg_file, which is wire
-        wire[BIT_W-1:0] RS1_DATA, RS2_DATA;//to Reg_file, which is wire
-        reg[BIT_W-1:0] WRITE_DATA;
+        wire [BIT_W-1:0] RS1_DATA, RS2_DATA;//to Reg_file, which is wire
+        reg [BIT_W-1:0] WRITE_DATA;
         reg write_to_reg;//needs to write back to reg like ALU and LW, 0 for no, 1 for yes
 
         //MULDIV-unit declaration
@@ -127,7 +128,7 @@ module CHIP #(                                                                  
         reg mul_valid;
         reg [BIT_W-1:0] mul_rs1;
         reg [BIT_W-1:0] mul_rs2;
-        reg mul_mode;   //determine if mul or div
+        reg [1:0] mul_mode;   //determine if mul or div
         //output
         wire [2*BIT_W-1:0] mul_wdata;
         wire mul_ready_output;
@@ -151,7 +152,7 @@ module CHIP #(                                                                  
     assign o_DMEM_addr = dmem_addr;//data memory address
     assign o_DMEM_wdata = dmem_wdata;//write data to data memory
     //attach input 
-    assign dmem_stall = i_DMEM_stall;//input -> wire so that we know when to stall
+    // assign dmem_stall = i_DMEM_stall;//input -> wire so that we know when to stall
     
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submodules
@@ -190,43 +191,51 @@ module CHIP #(                                                                  
             PC <= 32'h00010000; // Do not modify this value!!!
             dmem_cen <= 0;   //reset enable signal
             dmem_wen <= 0;   //reset enable signal
-            // state <= S_IDLE;
+            state <= S_IDLE;
         end
         else begin
             PC <= next_PC;
             dmem_cen <= dmem_cen_nxt;
             dmem_wen <= dmem_wen_nxt;
-            // state <= state_nxt;
+            state <= state_nxt;
         end
     end
 
     //FSM
-    // always @(*) begin
-    //     case (state)
-    //         S_IDLE: begin
-    //             if (i_DMEM_stall || stall_counter > 1) state_nxt = S_IDLE;//keep stall
-    //             else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
-    //             //determine mul or not
-    //         end
-    //         S_ONE_CYCLE_EXEC: begin
-    //             if (i_DMEM_stall) state_nxt = S_IDLE;//stall
-    //             else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
-    //         end
-    //         S_MULTI_CYCLE_EXEC: begin
-    //             if (mul_ready_output == 0) state_nxt = state;//not ready to output multiplication
-    //             else state_nxt = S_ONE_CYCLE_EXEC;
-    //         end
-    //         default: state_nxt = state;
-    //     endcase
-    // end
+    always @(*) begin
+        case (state)
+            S_IDLE: begin
+                if (i_DMEM_stall || stall_counter > 1) state_nxt = S_IDLE;//keep stall
+                else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
+                //determine mul or not
+            end
+            S_ONE_CYCLE_EXEC: begin
+                if (i_DMEM_stall) state_nxt = S_IDLE;//stall
+                else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
+            end
+            S_MULTI_CYCLE_EXEC: begin
+                if (mul_ready_output == 0) state_nxt = state;//not ready to output multiplication
+                else state_nxt = S_ONE_CYCLE_EXEC;
+            end
+            default: state_nxt = state;
+        endcase
+    end
 
     //stall counter counts when LW or SW
     always @(posedge i_clk) begin
-        if ( ((opcode == LW) || (opcode == SW)) && i_DMEM_stall == 1) begin
-            stall_counter = stall_counter + 1;
-        end    
+        if ( ((opcode == LW) || (opcode == SW)) && i_DMEM_stall == 1) stall_counter = stall_counter + 1;
         else stall_counter = 0;//zero when no store or load
     end
+
+    // always @(posedge i_clk) begin
+    //     if ((opcode == MULDIV) && ({FUNC3, FUNC7} == {FUNC3_MUL, FUNC7_MUL}) && mul_valid) mul_stall_counter = mul_stall_counter + 1;
+    //     else mul_stall_counter = 0;
+    // end
+
+    // always @(posedge i_clk) begin
+    //     if ((opcode == MULDIV) && ({FUNC3, FUNC7} == {FUNC3_MUL, FUNC7_MUL})) mul_valid = 1;
+    //     else mul_valid = 0;
+    // end
 
     always @(*) begin
         //set the instruction-memory-access-enable to 1 if there is no imem
@@ -296,6 +305,47 @@ module CHIP #(                                                                  
                         {FUNC3_XOR, FUNC7_XOR}: begin
                             write_to_reg = 1;
                             WRITE_DATA = RS1_DATA ^ RS2_DATA;
+                        end
+                        //I found out MUL and DIV opcode are the same
+                        {FUNC3_MUL, FUNC7_MUL}: begin
+                            write_to_reg = 0;//init no write back to reg
+                            mul_rs1 = RS1_DATA;
+                            mul_rs2 = RS2_DATA;
+                            $display("here is MUL");
+                            //mul ready to write to reg
+                            if (mul_ready_output) begin
+                                write_to_reg = 1;
+                                next_PC = PC + 4;
+                                mul_mode = 1;
+                                mul_valid = 0;//turn off valid mul unit
+                                $display("here is ready to output");
+                            end
+                            else begin
+                                write_to_reg = 0;//not ready to write
+                                next_PC = PC;//stall
+                                mul_mode = 0;
+                                mul_valid = 1;
+                            end
+                            WRITE_DATA = mul_wdata[BIT_W-1:0];
+                        end
+                        {FUNC3_DIV, FUNC7_DIV}: begin
+                            write_to_reg = 0;//init no write back to reg
+                            mul_rs1 = RS1_DATA;
+                            mul_rs2 = RS2_DATA;
+                            //mul ready to write to reg
+                            if (mul_ready_output) begin
+                                write_to_reg = 1;
+                                next_PC = PC + 4;
+                                mul_mode = 2;
+                                mul_valid = 0;//turn off valid mul unit
+                            end
+                            else begin
+                                write_to_reg = 0;//not ready to write
+                                next_PC = PC;//stall
+                                mul_mode = 0;
+                                mul_valid = 1;
+                            end
+                            WRITE_DATA = mul_wdata[BIT_W-1:0];
                         end
                         default: begin
                             //default setting
@@ -403,25 +453,6 @@ module CHIP #(                                                                  
                         end
                         default: next_PC = PC + 4;
                     endcase
-                end
-                MULDIV: begin
-                    write_to_reg = 0;
-                    mul_rs1 = RS1_DATA;
-                    mul_rs2 = RS2_DATA;
-                    if (mul_ready_output) begin
-                        next_PC = PC + 4;
-                        //ready to output and write to reg
-                        write_to_reg = 1;
-                        mul_mode = 0;
-                        mul_valid = 0;
-                    end
-                    else begin
-                        next_PC = PC;
-                        mul_mode = 0;
-                        mul_valid = 1;
-                        write_to_reg = 0;
-                    end
-                    WRITE_DATA = mul_wdata[BIT_W-1:0];
                 end
                 AUIPC: begin
                     write_to_reg = 1;//we need to write back to rd
@@ -554,10 +585,12 @@ module MULDIV_unit(
     );
 
     parameter len = 32;
+    parameter S_IDLE = 2'b00, S_ONE_CYCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
+
     //valid means the muldiv_unit should work now
     input mul_clk, mul_rst_n, mul_valid;
-    parameter MUL = 0, DIV = 1;
-    input mul_mode; //mode=0, multiplication; mode=1, division
+    parameter IDLE = 0, MUL_MODE = 1, DIV_MODE = 2, SL1_MODE = 3;
+    input [1:0] mul_mode; //mode=0 IDLE, mode=1 MUL, mode=2 DIV
     input [len-1:0] mul_rs1, mul_rs2;
     output [2*len-1:0] mul_data;
     //output the ready signal
@@ -565,86 +598,135 @@ module MULDIV_unit(
     
     // Todo: HW2
     //the input would have "mul" as prefix
-    reg [len-1:0] operand_a, operand_a_nxt;
-    reg [len-1:0] operand_b, operand_b_nxt;
-    reg mode, mode_nxt;
+    reg [2*len-1:0] operand_a, operand_a_nxt;
+    reg [2*len-1:0] operand_b, operand_b_nxt;
+    reg [1:0] mode, mode_nxt;
     reg [2*len-1:0] out_result; //this would finally connect to output
-    reg [2*len:0] mul_temp_result;  //this would deal with overflow prob
+    reg [2*len:0] mul_temp_result, mul_temp_result_nxt;  //this would deal with overflow prob
     //counter
-    reg [4:0] cnt;
-    reg ready_to_output;
+    reg [4:0] cnt, cnt_nxt;
+    reg ready_to_output, ready_to_output_nxt;
 
+    reg [1:0] state, state_nxt;
+    
     //wire assignment
     assign mul_done = ready_to_output;
     assign mul_data = out_result;
 
     //Always Combination
     //load input
-    always @(*) begin
-        if (mul_valid) begin
-            operand_a_nxt = mul_rs1;
-            operand_b_nxt = mul_rs2;
-            mode_nxt = mul_mode;
+    always @(negedge mul_clk) begin
+        if (mul_valid && !cnt && mul_rst_n && !ready_to_output) begin
+            //multiplication initialization
+            mode <= mul_mode;
+            mode_nxt <= mul_mode;
+            cnt <= 1;
+            state <= state_nxt;
+            ready_to_output <= 0;//still no ready to output
+            mul_temp_result <= mul_temp_result_nxt;
+        end
+        else if (mul_rst_n) begin
+            //if ready to output
+            if (cnt == 33) begin
+                mode <= 0;
+                mode_nxt <= 0;
+                mul_temp_result <= mul_temp_result_nxt;
+            end
+            else begin
+                //hold everthin
+                mode <= mul_mode;
+                mode_nxt <= mul_mode;
+                mul_temp_result <= mul_temp_result_nxt;
+            end
+            cnt <= cnt_nxt;
+            ready_to_output <= ready_to_output_nxt;
+            state <= state_nxt;
         end
         else begin
-            operand_a_nxt = operand_a;
-            operand_b_nxt = operand_b;
-            mode_nxt = mode;
+            //reset everything
+            mode <= 0;
+            mode_nxt <= 0;
+            cnt <= 0;
+            state <= S_IDLE;
+            ready_to_output <= 0;
+            mul_temp_result <= 0;
         end
     end
-
+    //FSM
+    always @(*) begin
+        case(state) 
+            S_IDLE: begin
+                if (!mul_valid) state_nxt = S_IDLE; //no activate
+                else begin
+                    case (mul_mode)
+                        SL1_MODE: state_nxt = S_ONE_CYCLE_OP;
+                        MUL_MODE: state_nxt = S_MULTI_CYCLE_OP;
+                        DIV_MODE: state_nxt = S_MULTI_CYCLE_OP;
+                        default: state_nxt = S_IDLE;
+                    endcase
+                end
+            end
+            S_ONE_CYCLE_OP: begin
+                state_nxt = state;//output cycle
+            end
+            S_MULTI_CYCLE_OP: begin
+                if (cnt == 33) begin
+                    state_nxt = S_IDLE;//ready to output
+                end
+                else begin
+                    state_nxt = S_MULTI_CYCLE_OP;
+                end
+            end
+            default: begin
+                state_nxt = state;
+            end
+        endcase
+    end
     // counter 
-    always @(posedge mul_clk) begin
-        if (cnt <= 31 && cnt >= 0) cnt <= cnt + 1;
-        else cnt <= 4'b0;
+    always @(*) begin
+        if (state == S_MULTI_CYCLE_OP) begin
+            if (cnt == 32) begin
+                ready_to_output_nxt = 1;//ready to output
+                cnt_nxt = 33;
+            end
+            else if (cnt == 33) begin
+                ready_to_output_nxt = 0;
+                cnt_nxt = 0;
+            end
+            else begin
+                ready_to_output_nxt = 0;
+                cnt_nxt = cnt + 1;
+            end
+        end
+        else if (state == S_ONE_CYCLE_OP) begin
+            //one cycle for output
+            ready_to_output_nxt = 1;
+            cnt_nxt = 0;
+        end
+        else begin
+            ready_to_output_nxt = 0;
+            cnt_nxt = 0;
+        end
     end
 
     //ALU Output
-    always @(cnt) begin
-        if (mode == MUL) begin
-            if (cnt <= 31 && cnt >= 0) begin
-                if (mul_temp_result==0) mul_temp_result = operand_b;
-                else ;
-                if (mul_temp_result[0] == 1) mul_temp_result[2*len: len] = mul_temp_result[2*len-1:len] + operand_a;
-                else ;
-                mul_temp_result = (mul_temp_result >> 1);
-            end
-            else ;
-        end
-        else begin
-            if (cnt <= 31 && cnt >= 0) begin
-                //initially, we copy dividend to temp_result
-                if (mul_temp_result == 0) mul_temp_result = (operand_a << 1);
-                else ;
-                //first determine if the remainder > divisor or not
-                if (mul_temp_result[2*len-1: len] < operand_b) mul_temp_result = (mul_temp_result << 1);
-                else begin
-                    mul_temp_result[2*len-1: len] = mul_temp_result[2*len-1: len] - operand_b;
-                    //shift the whole result left 1 bit
-                    mul_temp_result = (mul_temp_result << 1);
-                    mul_temp_result[0] = 1;
+    always @(*) begin
+        if (mul_rst_n && mul_valid && cnt > 0) begin
+            operand_a = mul_rs1;
+            operand_b = mul_rs2;
+            case(mode)
+                SL1_MODE: begin
+                    mul_temp_result_nxt = operand_a << operand_b;
                 end
-                if (cnt == 31) begin
-                    mul_temp_result[2*len: len] = (mul_temp_result[2*len: len] >> 1);
+                MUL_MODE: begin
+                    if (operand_b[cnt-1]) mul_temp_result_nxt = mul_temp_result + (operand_a <<< (cnt -1));
+                    else mul_temp_result_nxt = out_result;
                 end
-                else ;
-            end
-            else ;
+                // DIV_MODE:
+                default: mul_temp_result_nxt = 0;
+            endcase
         end
-    end
-
-    //Sequential always block
-    always @(posedge mul_clk or negedge mul_rst_n) begin
-        if (!mul_rst_n) begin
-            operand_a <= 0;
-            operand_b <= 0;
-            mode <= 0;
-        end
-        else begin
-            operand_a <= operand_a_nxt;
-            operand_b <= operand_b_nxt;
-            mode <= mode_nxt;
-        end
+        out_result = mul_temp_result;
     end
 endmodule
 
