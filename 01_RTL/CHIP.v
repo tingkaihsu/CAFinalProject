@@ -40,23 +40,12 @@ module CHIP #(                                                                  
     parameter AUIPC = 7'b0010111;
     parameter JAL = 7'b1101111;
     parameter JALR = 7'b1100111;
-    parameter ASAXM = 7'b0110011;
-    parameter ADD = 7'b0110011;
-    parameter SUB = 7'b0110011;
-    parameter AND = 7'b0110011;
-    parameter XOR = 7'b0110011;
-    parameter ADDI = 7'b0010011;
-    parameter SLLI = 7'b0010011;
-    parameter SLTI = 7'b0010011;
-    parameter SRAI = 7'b0010011;
+    parameter ASAXM = 7'b0110011;//ADD SUB AND XOR MUL
+    parameter IMMD_OP = 7'b0010011;
     parameter LW = 7'b0000011;
     parameter SW = 7'b0100011;
-    parameter MUL = 7'b0110011;
     parameter DIV = 7'b0110011;
-    parameter BEQ = 7'b1100011;
-    parameter BGE = 7'b1100011;
-    parameter BLT = 7'b1100011;
-    parameter BNE = 7'b1100011;
+    parameter BRNCH = 7'b1100011;
     parameter ECALL = 7'b1110011;
 
     //funct3
@@ -326,7 +315,7 @@ module CHIP #(                                                                  
                         end
                     endcase
                 end
-                7'b0010011: begin
+                IMMD_OP: begin
                     case (funct3)
                         ADDI_FUNCT3: begin //addi
                             wrt_to_rd = 1;
@@ -354,7 +343,7 @@ module CHIP #(                                                                  
                         end
                     endcase
                 end
-                7'b0000011: begin //lw
+                LW: begin 
                     immd = instr[BIT_W-1:20];
                     if(!i_DMEM_stall && stall_counter > 0) begin
                         wrt_to_rd = 1;
@@ -371,7 +360,7 @@ module CHIP #(                                                                  
                     end
                     
                 end
-                7'b0100011: begin //sw
+                SW: begin
                     wrt_to_rd = 0;
                     immd = {instr[BIT_W-1:25], instr[11:7]};
                     if(!i_DMEM_stall && stall_counter > 0) begin
@@ -388,7 +377,7 @@ module CHIP #(                                                                  
                         next_PC = PC;
                     end
                 end
-                7'b1100011: begin //beq, bge, blt, bne
+                BRNCH: begin //beq, bge, blt, bne
                     immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
                     case(funct3)
                         BEQ_FUNCT3: begin //beq
@@ -408,12 +397,8 @@ module CHIP #(                                                                  
                             end
                         end
                         BLT_FUNCT3: begin //blt
-                            if($signed(rs1_data) < $signed(rs2_data)) begin
-                                next_PC = PC + $signed(immd);
-                            end
-                            else begin
-                                next_PC = PC + 4;
-                            end
+                            if($signed(rs1_data) < $signed(rs2_data)) next_PC = PC + $signed(immd);
+                            else next_PC = PC + 4;
                         end
                         BNE_FUNCT3: begin //bne
                             if(rs1_data != rs2_data) begin
