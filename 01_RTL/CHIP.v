@@ -436,6 +436,7 @@ module CHIP #(                                                                  
                     write_to_reg = 1;
                     immd = {instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0};
                     next_PC = $signed(PC) + $signed({instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0});
+                    //next_PC cannot directly use immd, weird
                 end
                 JALR: begin
                     //we store the next instr at rd
