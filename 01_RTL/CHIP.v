@@ -95,7 +95,7 @@ module CHIP #(                                                                  
     // TODO: any declaration
         reg [BIT_W-1:0] PC, next_PC;
         reg mem_cen, mem_wen, imem_cen, mem_cen_nxt, mem_wen_nxt;
-        reg [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
+        reg [BIT_W-1:0] dmem_addr, mem_wdata, mem_rdata;
 
         reg [6: 0] opcode;
         reg [2: 0] funct3;
@@ -126,7 +126,7 @@ module CHIP #(                                                                  
     assign o_IMEM_cen = imem_cen;
     assign o_DMEM_cen = mem_cen;
     assign o_DMEM_wen = mem_wen;
-    assign o_DMEM_addr = mem_addr;
+    assign o_DMEM_addr = dmem_addr;
     assign o_DMEM_wdata = mem_wdata;
     assign o_finish = finish;
     // assign wrt_to_rd = wrt_to_rd;
@@ -211,14 +211,14 @@ module CHIP #(                                                                  
             mem_wdata = rs2_data;
             if(opcode == LW) begin
                 immd = instr[BIT_W-1:20];
-                mem_addr = rs1_data + $signed(immd);
+                dmem_addr = $signed(rs1_data) + $signed(immd);
             end
             else if(opcode == SW) begin
                 immd = {instr[BIT_W-1:25], instr[11:7]};
-                mem_addr = rs1_data + $signed(immd);
+                dmem_addr = $signed(rs1_data) + $signed(immd);
             end
             else begin
-                mem_addr = 0;
+                dmem_addr = 0;
             end
             write_data = 0;
             immd = 0;
@@ -236,7 +236,7 @@ module CHIP #(                                                                  
             mul_mode = 3;
             mul_in_a = 0;
             mul_in_b = 0;
-            mem_addr = 0;
+            dmem_addr = 0;
             mem_wdata = 0;
             mem_rdata = 0;
             mem_cen_nxt = 0;
@@ -364,7 +364,7 @@ module CHIP #(                                                                  
                         // $display("load value %h", write_data);
                     end
                     else begin
-                        mem_addr = rs1_data + $signed(immd);
+                        dmem_addr = rs1_data + $signed(immd);
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 1;
                         next_PC = PC;
@@ -375,13 +375,13 @@ module CHIP #(                                                                  
                     wrt_to_rd = 0;
                     immd = {instr[BIT_W-1:25], instr[11:7]};
                     if(!i_DMEM_stall && stall_counter > 0) begin
-                        mem_addr = rs1_data + $signed(immd);
+                        dmem_addr = $signed(rs1_data) + $signed(immd);
                         mem_wdata = rs2_data;
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 0;
                     end
                     else begin
-                        mem_addr = rs1_data + $signed(immd);
+                        dmem_addr = $signed(rs1_data) + $signed(immd);
                         mem_wdata = rs2_data;
                         mem_cen_nxt = 1;
                         mem_wen_nxt = 1;
@@ -438,7 +438,7 @@ module CHIP #(                                                                  
                     write_data = 0;
                     immd = 0;
                     finish = 0;
-                    mem_addr = 0;
+                    dmem_addr = 0;
                     mem_wdata = 0;
                     mem_rdata = 0;
                     mem_cen_nxt = 0;
@@ -460,7 +460,7 @@ module CHIP #(                                                                  
             mul_mode = 3;
             mul_in_a = 0;
             mul_in_b = 0;
-            mem_addr = 0;
+            dmem_addr = 0;
             mem_wdata = 0;
             mem_rdata = 0;
             mem_cen_nxt = 0;
