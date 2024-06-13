@@ -134,7 +134,7 @@ module CHIP #(                                                                  
         .clk(i_clk),
         .rst_n(i_rst_n),
         .valid(mul_valid),
-        .ready(mul_ready),
+        .mul_ready_output(mul_ready),
         .mode(mul_mode),
         .rs1_data(mul_in_a),
         .rs2_data(mul_in_b),
@@ -258,15 +258,15 @@ module CHIP #(                                                                  
                             mul_in_b = rs2_data;
                             if (mul_ready) begin
                                 next_PC = PC + 4;
-                                wrt_to_rd = 1;
+                                wrt_to_rd = 1;//wrt back to rd
                                 mul_mode = 3;//IDLE
                                 mul_valid = 0;//output done
                             end
                             else begin
-                                next_PC = PC;
+                                next_PC = PC;//stall
                                 wrt_to_rd = 0;
                                 mul_mode = 2;//MUL
-                                mul_valid = 1;//ready to mul next cycle
+                                mul_valid = 1;//to mul next cycle
                             end
                             write_data = mul_result[BIT_W-1:0];
                         end
@@ -281,7 +281,9 @@ module CHIP #(                                                                  
                     case (func3)
                         ADDI_FUNCT3: begin //addi
                             wrt_to_rd = 1;
-                            write_data = $signed(rs1_data) + $signed(instr[BIT_W-1:20]);
+                            immd = instr[BIT_W-1:20];
+                            // write_data = $signed(rs1_data) + $signed(instr[BIT_W-1:20]);
+                            write_data = $signed(rs1_data) + $signed(immd);
                         end
                         SLLI_FUNCT3: begin //slli
                             wrt_to_rd = 1;
@@ -713,7 +715,7 @@ module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
     end
 endmodule
 
-module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
+module MULDIV_unit(clk, rst_n, valid, mul_ready_output, mode, rs1_data, rs2_data, out);
     // Todo: your HW2
     // Definition of ports
     parameter BIT_W = 32;
@@ -721,7 +723,7 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
     parameter IDLE = 2'b11, MUL_MODE = 2'b10, DIV_MODE = 2'b01, SL1_MODE = 2'b00;
     input clk, rst_n, valid;
     input [1:0] mode; // 0: shift left, 1: div, 2: mul, 3:IDLE
-    output ready;
+    output mul_ready_output;
     input [BIT_W-1:0] rs1_data, rs2_data;
     output [2*BIT_W-1:0] out;
 
@@ -731,19 +733,19 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
     // definition of internal signals
     reg [2*BIT_W-1:0] alu_out, operand_a, operand_b;
     reg [5:0] counter, counter_nxt;
-    reg rdy, rdy_nxt;
+    reg ready_output, ready_output_nxt;
     reg [1:0] mode_now, mode_nxt;
     reg [2*BIT_W-1: 0] temp, temp_nxt;
-    assign ready = rdy;
+    assign mul_ready_output = ready_output;
     assign out = alu_out;
 
     always @(negedge clk) begin
-        if (valid && counter == 0 && rst_n && rdy == 0) begin
+        if (valid && counter == 0 && rst_n && ready_output == 0) begin
             mode_now <= mode;
             mode_nxt <= mode;
             counter <= 1;
             state <= state_nxt;
-            rdy <= 0;
+            ready_output <= 0;
             temp <= temp_nxt;
         end
         else if(rst_n)begin
@@ -759,36 +761,28 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
             end
             counter <= counter_nxt;
             state <= state_nxt;
-            rdy <= rdy_nxt;
+            ready_output <= ready_output_nxt;
         end
         else begin
             mode_now <= 3;
             mode_nxt <= 3;
             counter <= 0;
             state <= S_IDLE;
-            rdy <= 0;
+            ready_output <= 0;
             temp <= 0;
         end
     end
-
+    //FSM
     always @(*) begin
         case(state)
             S_IDLE: begin
                 if(!valid) state_nxt = S_IDLE;
                 else begin
                     case(mode)
-                        2'b00: begin
-                            state_nxt = S_ONE_CYCLE_OP;
-                        end
-                        2'b01: begin
-                            state_nxt = S_MULTI_CYCLE_OP;
-                        end
-                        2'b10: begin
-                            state_nxt = S_MULTI_CYCLE_OP;
-                        end
-                        default: begin
-                            state_nxt = S_IDLE;
-                        end
+                        SL1_MODE: state_nxt = S_ONE_CYCLE_OP;
+                        DIV_MODE: state_nxt = S_MULTI_CYCLE_OP;
+                        MUL_MODE: state_nxt = S_MULTI_CYCLE_OP;
+                        default: state_nxt = S_IDLE;
                     endcase
                 end
             end
@@ -801,27 +795,28 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
         endcase
     end
 
+
     always @(*) begin
         if (state == S_MULTI_CYCLE_OP) begin
             if(counter == 32) begin
-                rdy_nxt = 1;
+                ready_output_nxt = 1;
                 counter_nxt = 33;
             end
             else if(counter > 32) begin
-                rdy_nxt = 0;
+                ready_output_nxt = 0;
                 counter_nxt = 0;
             end
             else begin
-                rdy_nxt = 0;
+                ready_output_nxt = 0;
                 counter_nxt = counter + 1;
             end
         end
         else if (state == S_ONE_CYCLE_OP) begin
-            rdy_nxt = 1;
+            ready_output_nxt = 1;
             counter_nxt = 0;
         end
         else begin
-            rdy_nxt = 0;
+            ready_output_nxt = 0;
             counter_nxt = 0;
         end
     end
