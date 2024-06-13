@@ -331,8 +331,6 @@ module CHIP #(                                                                  
                         end
                         SRAI_FUNCT3: begin //srai
                             wrt_to_rd = 1;
-                            //$display("rs1_data = %d", rs1_data);
-                            //$display("immd = %d", instr[24:20]);
                             write_data = rs1_data >> $unsigned(instr[24:20]);
                         end
                         default: begin
@@ -353,7 +351,7 @@ module CHIP #(                                                                  
                         // $display("load value %h", write_data);
                     end
                     else begin
-                        dmem_addr = rs1_data + $signed(immd);
+                        dmem_addr = $signed(rs1_data) + $signed(immd);
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 1;
                         next_PC = PC;
@@ -381,29 +379,19 @@ module CHIP #(                                                                  
                     immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
                     case(funct3)
                         BEQ_FUNCT3: begin //beq
-                            if(rs1_data == rs2_data) begin
-                                next_PC = PC + $signed(immd);
-                            end
-                            else begin
-                                next_PC = PC + 4;
-                            end
+                            if(rs1_data == rs2_data) next_PC = $signed(PC) + $signed(immd);
+                            else next_PC = PC + 4;
                         end
                         BGE_FUNCT3: begin //bge
-                            if($signed(rs1_data) >= $signed(rs2_data)) begin
-                                next_PC = PC + $signed(immd);
-                            end
-                            else begin
-                                next_PC = PC + 4;
-                            end
+                            if($signed(rs1_data) >= $signed(rs2_data)) next_PC = $signed(PC) + $signed(immd);
+                            else next_PC = PC + 4;
                         end
                         BLT_FUNCT3: begin //blt
-                            if($signed(rs1_data) < $signed(rs2_data)) next_PC = PC + $signed(immd);
+                            if($signed(rs1_data) < $signed(rs2_data)) next_PC = $signed(PC) + $signed(immd);
                             else next_PC = PC + 4;
                         end
                         BNE_FUNCT3: begin //bne
-                            if(rs1_data != rs2_data) begin
-                                next_PC = PC + $signed(immd);
-                            end
+                            if(rs1_data != rs2_data) next_PC = $signed(PC) + $signed(immd);
                             else begin
                                 next_PC = PC + 4;
                             end
@@ -413,7 +401,7 @@ module CHIP #(                                                                  
                         end
                     endcase
                 end
-                7'b1110011: begin //ecall
+                ECALL: begin //ecall
                     wrt_to_rd = 0;
                     finish = 1;
                 end
@@ -520,7 +508,7 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, in_A, in_B, out);
     reg [5:0] counter, counter_nxt;
     reg rdy, rdy_nxt;
     reg [1:0] mode_now, mode_nxt;
-    reg [2*BIT_W-1: 0] temp, temp_nxt; //temp_1;
+    reg [2*BIT_W-1: 0] temp, temp_nxt;
     assign ready = rdy;
     assign out = alu_out;
 
@@ -561,9 +549,7 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, in_A, in_B, out);
     always @(*) begin
         case(state)
             S_IDLE: begin
-                if(!valid) begin
-                    state_nxt = S_IDLE;
-                end
+                if(!valid) state_nxt = S_IDLE;
                 else begin
                     case(mode)
                         2'b00: begin
@@ -581,21 +567,12 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, in_A, in_B, out);
                     endcase
                 end
             end
-            S_ONE_CYCLE_OP: begin
-                // $display("shift process");
-                state_nxt = S_IDLE;
-            end
+            S_ONE_CYCLE_OP: state_nxt = S_IDLE;
             S_MULTI_CYCLE_OP: begin
-                if(counter == 33) begin
-                    state_nxt = S_IDLE;
-                end
-                else begin
-                    state_nxt = S_MULTI_CYCLE_OP;
-                end
+                if(counter == 33) state_nxt = S_IDLE;
+                else state_nxt = S_MULTI_CYCLE_OP;
             end
-            default: begin
-                state_nxt = state;
-            end
+            default: state_nxt = state;
         endcase
     end
 
