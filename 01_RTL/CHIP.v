@@ -96,7 +96,6 @@ module CHIP #(                                                                  
         reg [BIT_W-1:0] PC, next_PC;
         reg mem_cen, mem_wen, imem_cen, mem_cen_nxt, mem_wen_nxt;
         reg [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
-        // wire i_DMEM_stall;
 
         reg [6: 0] opcode;
         reg [2: 0] funct3;
@@ -105,16 +104,14 @@ module CHIP #(                                                                  
         wire [BIT_W-1: 0] rs1_data, rs2_data;
         reg [BIT_W-1: 0] write_data;
         reg [BIT_W-1: 0] immd;
-        reg regwrite;
-        wire RegWrite;
+        reg wrt_to_rd;
+        // wire wrt_to_rd;
         wire mul_ready; //for multi-cycle operation
         reg mul_valid;
         reg [1: 0] mul_mode;
         wire [2*BIT_W-1: 0] mul_result;
         reg [BIT_W-1: 0] mul_in_a, mul_in_b;
         reg [BIT_W-1: 0] instr;
-        // reg [1: 0] state, state_nxt;
-        // parameter S_IDLE = 0, S_MULTI_CYCLE_EXEC = 1, S_ONE_CYCLE_EXEC = 2;
         reg finish;
         reg [BIT_W-1:0] stall_counter;
         
@@ -132,8 +129,7 @@ module CHIP #(                                                                  
     assign o_DMEM_addr = mem_addr;
     assign o_DMEM_wdata = mem_wdata;
     assign o_finish = finish;
-    assign RegWrite = regwrite;
-    // assign i_DMEM_stall = i_DMEM_stall;
+    // assign wrt_to_rd = wrt_to_rd;
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
@@ -143,7 +139,7 @@ module CHIP #(                                                                  
     Reg_file reg0(               
         .i_clk  (i_clk),             
         .i_rst_n(i_rst_n),         
-        .wen    (regwrite),          
+        .wen    (wrt_to_rd),          
         .rs1    (rs1),                
         .rs2    (rs2),                
         .rd     (rd),                 
@@ -166,50 +162,15 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
-    
-    // todo: Finite State Machine
-    // always @(*) begin
-    //     case(state)
-    //         S_IDLE: begin
-    //             if(i_DMEM_stall || stall_counter > 1) begin
-    //                 state_nxt = S_IDLE;
-    //             end
-    //             else begin
-    //                 state_nxt = ({opcode, funct3, funct7} == {MUL, MUL_FUNCT3, MUL_FUNCT7})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
-    //             end
-    //         end
-    //         S_MULTI_CYCLE_EXEC: begin
-    //             if (mul_ready == 0) begin
-    //                 state_nxt = state;
-    //             end
-    //             else begin
-    //                 state_nxt = S_ONE_CYCLE_EXEC; // the following one cycle for dataWrite
-    //             end
-    //         end
-    //         S_ONE_CYCLE_EXEC: begin
-    //             state_nxt = ({opcode, funct3, funct7} == {MUL, MUL_FUNCT3, MUL_FUNCT7})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
-    //             if (i_DMEM_stall) begin
-    //                 state_nxt = S_IDLE;
-    //             end
-    //             else state_nxt = state_nxt;
-    //         end
-    //         default: begin
-    //             state_nxt = state;
-    //         end
-    //     endcase
-    // end
-
     // Todo: any combinational/sequential circuit
 
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
             PC = 32'h00010000; // Do not modify this value!!!
-            // state = S_IDLE;
             mem_cen = 0;
             mem_wen = 0;
         end
         else begin
-            // state = state_nxt;
             PC = next_PC;
             mem_cen = mem_cen_nxt;
             mem_wen = mem_wen_nxt;
@@ -217,9 +178,6 @@ module CHIP #(                                                                  
     end
 
     always @(posedge i_clk) begin
-        // $display("dmem_stall: %b", i_DMEM_stall);
-        // if (opcode == LW) $display("here is load! %b", i_DMEM_stall);
-        // $display("opcode %h", opcode);
         if ((opcode == LW || opcode == SW) && i_DMEM_stall == 1) begin
             stall_counter = stall_counter + 1;
         end
@@ -235,9 +193,8 @@ module CHIP #(                                                                  
         instr = i_IMEM_data;
         next_PC = (i_DMEM_stall)? PC : PC+4;
         if(i_DMEM_stall) begin
-            // next_PC = PC;
             finish = 0;
-            regwrite = 0;
+            wrt_to_rd = 0;
             mem_cen_nxt = 0;
             mem_wen_nxt = 0;
             opcode = instr[6:0];
@@ -250,7 +207,7 @@ module CHIP #(                                                                  
             mul_mode = 3;
             mul_in_a = 0;
             mul_in_b = 0;
-            regwrite = 0;
+            wrt_to_rd = 0;
             mem_wdata = rs2_data;
             if(opcode == LW) begin
                 immd = instr[BIT_W-1:20];
@@ -267,7 +224,6 @@ module CHIP #(                                                                  
             immd = 0;
         end
         else if(i_rst_n)begin
-            // next_PC = PC + 4;
             finish = 0;
             opcode = instr[6:0];
             funct3 = instr[14:12];
@@ -275,7 +231,7 @@ module CHIP #(                                                                  
             rs1 = instr[19:15];
             rs2 = instr[24:20];
             rd = instr[11:7];
-            regwrite = 0;
+            wrt_to_rd = 0;
             mul_valid = 0;
             mul_mode = 3;
             mul_in_a = 0;
@@ -289,17 +245,17 @@ module CHIP #(                                                                  
             immd = 0;
             case(opcode) 
                 AUIPC: begin //auipc
-                    regwrite = 1;
+                    wrt_to_rd = 1;
                     immd[19:0] = instr[BIT_W-1:12];
                     write_data = PC + {immd[BIT_W-1:12], 12'b0};
                 end
                 JAL: begin //jal
-                    regwrite = 1;
+                    wrt_to_rd = 1;
                     next_PC = $signed(PC) + $signed({instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0});
                     write_data = PC + 4;
                 end
                 JALR: begin //jalr
-                    regwrite = 1;
+                    wrt_to_rd = 1;
                     immd[11:0] = instr[BIT_W-1:20];
                     next_PC = $signed(rs1_data) + $signed(immd[11:0]);
                     write_data = PC + 4;
@@ -307,31 +263,31 @@ module CHIP #(                                                                  
                 ASAXM: begin // add, sub, and, xor
                     case({funct3, funct7})
                         {ADD_FUNCT3, ADD_FUNCT7}: begin
-                            regwrite = 1;
+                            wrt_to_rd = 1;
                             write_data = $signed(rs1_data) + $signed(rs2_data);
                             // dealing with overflow
                         end
                         {SUB_FUNCT3, SUB_FUNCT7}: begin
-                            regwrite = 1;
+                            wrt_to_rd = 1;
                             write_data = $signed(rs1_data) - $signed(rs2_data);
                         end
                         {AND_FUNCT3, ADD_FUNCT7}: begin
-                            regwrite = 1;
+                            wrt_to_rd = 1;
                             write_data = rs1_data & rs2_data;
                         end
                         {XOR_FUNCT3, XOR_FUNCT7}: begin
-                            regwrite = 1;
+                            wrt_to_rd = 1;
                             write_data = rs1_data ^ rs2_data;
                         end
                         /*
                         {DIV_FUNCT3, DIV_FUNCT7}: begin
-                            regwrite = 0;
+                            wrt_to_rd = 0;
                             mul_in_a = rs1_data;
                             mul_in_b = rs2_data;
                             //$display("mul_valid = %d", mul_valid);
                             if (mul_ready) begin
                                 next_PC = PC + 4;
-                                regwrite = 1;
+                                wrt_to_rd = 1;
                                 mul_mode = 3;
                                 mul_valid = 0;
                             end
@@ -339,19 +295,19 @@ module CHIP #(                                                                  
                                 next_PC = PC;
                                 mul_mode = 1;
                                 mul_valid = 1;
-                                regwrite = 0;
+                                wrt_to_rd = 0;
                             end
                             write_data = mul_result[BIT_W-1:0];
                         end
                         */
                         {MUL_FUNCT3, MUL_FUNCT7}: begin
-                            regwrite = 0;
+                            wrt_to_rd = 0;
                             mul_in_a = rs1_data;
                             mul_in_b = rs2_data;
                             //$display("mul_valid = %d", mul_valid);
                             if (mul_ready) begin
                                 next_PC = PC + 4;
-                                regwrite = 1;
+                                wrt_to_rd = 1;
                                 mul_mode = 3;
                                 mul_valid = 0;
                             end
@@ -359,13 +315,13 @@ module CHIP #(                                                                  
                                 next_PC = PC;
                                 mul_mode = 2;
                                 mul_valid = 1;
-                                regwrite = 0;
+                                wrt_to_rd = 0;
                             end
                             write_data = mul_result[BIT_W-1:0];
                         end
                         default: begin
                             next_PC = PC + 4;
-                            regwrite = 0;
+                            wrt_to_rd = 0;
                             write_data = 0;
                         end
                     endcase
@@ -373,26 +329,26 @@ module CHIP #(                                                                  
                 7'b0010011: begin
                     case (funct3)
                         ADDI_FUNCT3: begin //addi
-                            regwrite = 1;
+                            wrt_to_rd = 1;
                             write_data = $signed(rs1_data) + $signed(instr[BIT_W-1:20]);
                         end
                         SLLI_FUNCT3: begin //slli
-                            regwrite = 1;
+                            wrt_to_rd = 1;
                             write_data = rs1_data << $unsigned(instr[24:20]);
                         end
                         SLTI_FUNCT3: begin //slti
-                            regwrite = 1;
+                            wrt_to_rd = 1;
                             write_data = ($signed(rs1_data) < $signed(instr[BIT_W-1:20]))? 1 : 0;
                         end
                         SRAI_FUNCT3: begin //srai
-                            regwrite = 1;
+                            wrt_to_rd = 1;
                             //$display("rs1_data = %d", rs1_data);
                             //$display("immd = %d", instr[24:20]);
                             write_data = rs1_data >> $unsigned(instr[24:20]);
                         end
                         default: begin
                             next_PC = PC + 4;
-                            regwrite = 0;
+                            wrt_to_rd = 0;
                             write_data = 0;
                             immd = 0;
                         end
@@ -401,7 +357,7 @@ module CHIP #(                                                                  
                 7'b0000011: begin //lw
                     immd = instr[BIT_W-1:20];
                     if(!i_DMEM_stall && stall_counter > 0) begin
-                        regwrite = 1;
+                        wrt_to_rd = 1;
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 0;
                         write_data = i_DMEM_rdata;
@@ -416,7 +372,7 @@ module CHIP #(                                                                  
                     
                 end
                 7'b0100011: begin //sw
-                    regwrite = 0;
+                    wrt_to_rd = 0;
                     immd = {instr[BIT_W-1:25], instr[11:7]};
                     if(!i_DMEM_stall && stall_counter > 0) begin
                         mem_addr = rs1_data + $signed(immd);
@@ -473,12 +429,12 @@ module CHIP #(                                                                  
                     endcase
                 end
                 7'b1110011: begin //ecall
-                    regwrite = 0;
+                    wrt_to_rd = 0;
                     finish = 1;
                 end
                 default: begin
                     next_PC = PC + 4;
-                    regwrite = 0;
+                    wrt_to_rd = 0;
                     write_data = 0;
                     immd = 0;
                     finish = 0;
@@ -499,7 +455,7 @@ module CHIP #(                                                                  
             rs1 = 0;
             rs2 = 0;
             rd = 0;
-            regwrite = 0;
+            wrt_to_rd = 0;
             mul_valid = 0;
             mul_mode = 3;
             mul_in_a = 0;
