@@ -190,35 +190,36 @@ module CHIP #(                                                                  
             PC <= 32'h00010000; // Do not modify this value!!!
             dmem_cen <= 0;   //reset enable signal
             dmem_wen <= 0;   //reset enable signal
-            state <= S_IDLE;
+            // state <= S_IDLE;
         end
         else begin
             PC <= next_PC;
             dmem_cen <= dmem_cen_nxt;
             dmem_wen <= dmem_wen_nxt;
-            state <= state_nxt;
+            // state <= state_nxt;
         end
     end
 
     //FSM
-    always @(*) begin
-        case (state)
-            S_IDLE: begin
-                if (i_DMEM_stall || stall_counter > 1) state_nxt = S_IDLE;//keep stall
-                else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
-                //determine mul or not
-            end
-            S_ONE_CYCLE_EXEC: begin
-                if (i_DMEM_stall) state_nxt = S_IDLE;//stall
-                else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
-            end
-            S_MULTI_CYCLE_EXEC: begin
-                if (mul_ready_output == 0) state_nxt = state;//not ready to output multiplication
-                else state_nxt = S_ONE_CYCLE_EXEC;
-            end
-            default: state_nxt = state;
-        endcase
-    end
+    // always @(*) begin
+    //     case (state)
+    //         S_IDLE: begin
+    //             if (i_DMEM_stall || stall_counter > 1) state_nxt = S_IDLE;//keep stall
+    //             else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
+    //             //determine mul or not
+    //         end
+    //         S_ONE_CYCLE_EXEC: begin
+    //             if (i_DMEM_stall) state_nxt = S_IDLE;//stall
+    //             else state_nxt = ({opcode, FUNC3, FUNC7} == {MULDIV, FUNC3_MUL, FUNC7_MUL})? S_MULTI_CYCLE_EXEC : S_ONE_CYCLE_EXEC;
+    //         end
+    //         S_MULTI_CYCLE_EXEC: begin
+    //             if (mul_ready_output == 0) state_nxt = state;//not ready to output multiplication
+    //             else state_nxt = S_ONE_CYCLE_EXEC;
+    //         end
+    //         default: state_nxt = state;
+    //     endcase
+    // end
+
     //stall counter counts when LW or SW
     always @(posedge i_clk) begin
         if ( ((opcode == LW) || (opcode == SW)) && i_DMEM_stall == 1) begin
@@ -492,6 +493,10 @@ module CHIP #(                                                                  
             else if (opcode == SW) begin
                 immd = {instr[BIT_W-1:25], instr[11:7]};
                 dmem_addr = $signed(RS1_DATA) + $signed(immd);
+            end
+            else begin
+                dmem_addr = 0;
+                immd = 0;
             end
             immd = 0;//reset immd
         end
