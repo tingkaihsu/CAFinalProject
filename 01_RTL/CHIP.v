@@ -48,7 +48,7 @@ module CHIP #(                                                                  
     parameter BRNCH = 7'b1100011;
     parameter ECALL = 7'b1110011;
 
-    //funct3
+    //func3
     parameter JALR_FUNCT3 = 3'b000;
     parameter ADD_FUNCT3 = 3'b000;
     parameter SUB_FUNCT3 = 3'b000;
@@ -68,7 +68,7 @@ module CHIP #(                                                                  
     parameter BNE_FUNCT3 = 3'b001;
     parameter ECALL_FUNCT3 = 3'b000;
 
-    //funct7
+    //func7
     parameter ADD_FUNCT7 = 7'b0000000;
     parameter SUB_FUNCT7 = 7'b0100000;
     parameter XOR_FUNCT7 = 7'b0000000;
@@ -87,8 +87,8 @@ module CHIP #(                                                                  
         reg [BIT_W-1:0] dmem_addr, mem_wdata, mem_rdata;
 
         reg [6: 0] opcode;
-        reg [2: 0] funct3;
-        reg [6: 0] funct7;
+        reg [2: 0] func3;
+        reg [6: 0] func7;
         reg [4: 0] rs1, rs2, rd;
         wire [BIT_W-1: 0] rs1_data, rs2_data;
         reg [BIT_W-1: 0] write_data;
@@ -143,8 +143,8 @@ module CHIP #(                                                                  
         .valid(mul_valid),
         .ready(mul_ready),
         .mode(mul_mode),
-        .in_A(mul_in_a),
-        .in_B(mul_in_b),
+        .rs1_data(mul_in_a),
+        .rs2_data(mul_in_b),
         .out(mul_result)
     );
 
@@ -187,8 +187,8 @@ module CHIP #(                                                                  
             mem_cen_nxt = 0;
             mem_wen_nxt = 0;
             opcode = instr[6:0];
-            funct3 = instr[14:12];
-            funct7 = instr[BIT_W-1:25];
+            func3 = instr[14:12];
+            func7 = instr[BIT_W-1:25];
             rs1 = instr[19:15];
             rs2 = instr[24:20];
             rd = instr[11:7];
@@ -215,8 +215,8 @@ module CHIP #(                                                                  
         else if(i_rst_n)begin
             finish = 0;
             opcode = instr[6:0];
-            funct3 = instr[14:12];
-            funct7 = instr[BIT_W-1:25];
+            func3 = instr[14:12];
+            func7 = instr[BIT_W-1:25];
             rs1 = instr[19:15];
             rs2 = instr[24:20];
             rd = instr[11:7];
@@ -250,7 +250,7 @@ module CHIP #(                                                                  
                     write_data = PC + 4;
                 end
                 ASAXM: begin // add, sub, and, xor
-                    case({funct3, funct7})
+                    case({func3, func7})
                         {ADD_FUNCT3, ADD_FUNCT7}: begin
                             wrt_to_rd = 1;
                             write_data = $signed(rs1_data) + $signed(rs2_data);
@@ -316,7 +316,7 @@ module CHIP #(                                                                  
                     endcase
                 end
                 IMMD_OP: begin
-                    case (funct3)
+                    case (func3)
                         ADDI_FUNCT3: begin //addi
                             wrt_to_rd = 1;
                             write_data = $signed(rs1_data) + $signed(instr[BIT_W-1:20]);
@@ -358,17 +358,15 @@ module CHIP #(                                                                  
                     
                 end
                 SW: begin
-                    wrt_to_rd = 0;
                     immd = {instr[BIT_W-1:25], instr[11:7]};
+                    dmem_addr = $signed(rs1_data) + $signed(immd);
+                    mem_wdata = rs2_data;
+                    wrt_to_rd = 0;
                     if(!i_DMEM_stall && stall_counter > 0) begin
-                        dmem_addr = $signed(rs1_data) + $signed(immd);
-                        mem_wdata = rs2_data;
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 0;
                     end
                     else begin
-                        dmem_addr = $signed(rs1_data) + $signed(immd);
-                        mem_wdata = rs2_data;
                         mem_cen_nxt = 1;
                         mem_wen_nxt = 1;
                         next_PC = PC;
@@ -376,7 +374,7 @@ module CHIP #(                                                                  
                 end
                 BRNCH: begin //beq, bge, blt, bne
                     immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
-                    case(funct3)
+                    case(func3)
                         BEQ_FUNCT3: begin //beq
                             if(rs1_data == rs2_data) next_PC = $signed(PC) + $signed(immd);
                             else next_PC = PC + 4;
@@ -420,8 +418,8 @@ module CHIP #(                                                                  
             next_PC = 0;
             finish = 0;
             opcode = 0;
-            funct3 = 0;
-            funct7 = 0;
+            func3 = 0;
+            func7 = 0;
             rs1 = 0;
             rs2 = 0;
             rd = 0;
@@ -486,14 +484,14 @@ module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
     end
 endmodule
 
-module MULDIV_unit(clk, rst_n, valid, ready, mode, in_A, in_B, out);
+module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
     // Todo: your HW2
     // Definition of ports
     parameter BIT_W = 32;
     input clk, rst_n, valid;
     input [1:0] mode; // 0: shift left, 1: div, 2: mul, 3:IDLE
     output ready;
-    input [BIT_W-1:0] in_A, in_B;
+    input [BIT_W-1:0] rs1_data, rs2_data;
     output [2*BIT_W-1:0] out;
 
     // definition of state
@@ -600,8 +598,8 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, in_A, in_B, out);
 
     always @(*) begin
         if(rst_n && valid && counter > 0) begin
-            operand_a = in_A;
-            operand_b = in_B;
+            operand_a = rs1_data;
+            operand_b = rs2_data;
             case(mode_now)
                 2'b00: begin
                     temp_nxt = operand_a << operand_b;
