@@ -343,15 +343,14 @@ module CHIP #(                                                                  
                 end
                 LW: begin 
                     immd = instr[BIT_W-1:20];
+                    dmem_addr = $signed(rs1_data) + $signed(immd);
+                    write_data = i_DMEM_rdata;
+                    wrt_to_rd = 1;
                     if(!i_DMEM_stall && stall_counter > 0) begin
-                        wrt_to_rd = 1;
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 0;
-                        write_data = i_DMEM_rdata;
-                        // $display("load value %h", write_data);
                     end
                     else begin
-                        dmem_addr = $signed(rs1_data) + $signed(immd);
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 1;
                         next_PC = PC;
@@ -392,9 +391,7 @@ module CHIP #(                                                                  
                         end
                         BNE_FUNCT3: begin //bne
                             if(rs1_data != rs2_data) next_PC = $signed(PC) + $signed(immd);
-                            else begin
-                                next_PC = PC + 4;
-                            end
+                            else next_PC = PC + 4;
                         end
                         default: begin
                             next_PC = PC + 4;
