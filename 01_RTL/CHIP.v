@@ -240,10 +240,49 @@ module CHIP #(                                                                  
     always @(*) begin
         //set the instruction-memory-access-enable to 1 if there is no imem
         //no access instr enable when stall
-        imem_cen = (i_DMEM_stall)? 0:1;
-        next_PC = (i_DMEM_stall)? PC:PC+4;
+        // imem_cen = (i_DMEM_stall)? 0:1;
+        // next_PC = (i_DMEM_stall)? PC:PC+4;
+        imem_cen = 1;
         instr = i_IMEM_data; //read the instruction
-        if(!i_DMEM_stall) begin
+        if (i_DMEM_stall) begin
+            //this is made for avoiding latch
+            next_PC = PC;
+            finish = 0;
+            write_to_reg = 0;
+            //mul div
+            mul_valid = 0;
+            mul_mode = 0;
+            mul_rs1 = 0;
+            mul_rs2 = 0;
+            //decoding
+            opcode = instr[6:0];
+            FUNC3 = instr[14:12];
+            FUNC7 = instr[BIT_W-1:25];
+            RS1 = instr[19:15];
+            RS2 = instr[24:20];
+            RD = instr[11:7];
+            WRITE_DATA = 0;
+            //data memory
+            dmem_wdata = RS2_DATA;
+            dmem_rdata = 0;
+            dmem_cen_nxt = 0;
+            dmem_wen_nxt = 0;
+            if (opcode == LW) begin
+                immd = instr[BIT_W-1:20];
+                dmem_addr = $signed(RS1_DATA) + $signed(immd);
+            end
+            else if (opcode == SW) begin
+                immd = {instr[BIT_W-1:25], instr[11:7]};
+                dmem_addr = $signed(RS1_DATA) + $signed(immd);
+            end
+            else begin
+                dmem_addr = 0;
+                immd = 0;
+            end
+            immd = 0;//reset immd
+        end
+        else if(i_rst_n) begin
+            next_PC = PC + 4;
             //decode the cases
             finish = 0;//no finish
             write_to_reg = 0;//no write back to reg
@@ -311,14 +350,14 @@ module CHIP #(                                                                  
                             write_to_reg = 0;//init no write back to reg
                             mul_rs1 = RS1_DATA;
                             mul_rs2 = RS2_DATA;
-                            $display("here is MUL");
+                            // $display("here is MUL");
                             //mul ready to write to reg
                             if (mul_ready_output) begin
                                 write_to_reg = 1;
                                 next_PC = PC + 4;
                                 mul_mode = 1;
                                 mul_valid = 0;//turn off valid mul unit
-                                $display("here is ready to output");
+                                // $display("here is ready to output");
                             end
                             else begin
                                 write_to_reg = 0;//not ready to write
@@ -496,8 +535,7 @@ module CHIP #(                                                                  
             endcase
         end
         else begin
-            //this is made for avoiding latch
-            next_PC = PC;
+            next_PC = PC + 4;
             finish = 0;
             write_to_reg = 0;
             //mul div
@@ -518,18 +556,7 @@ module CHIP #(                                                                  
             dmem_rdata = 0;
             dmem_cen_nxt = 0;
             dmem_wen_nxt = 0;
-            if (opcode == LW) begin
-                immd = instr[BIT_W-1:20];
-                dmem_addr = $signed(RS1_DATA) + $signed(immd);
-            end
-            else if (opcode == SW) begin
-                immd = {instr[BIT_W-1:25], instr[11:7]};
-                dmem_addr = $signed(RS1_DATA) + $signed(immd);
-            end
-            else begin
-                dmem_addr = 0;
-                immd = 0;
-            end
+            dmem_addr = 0;
             immd = 0;//reset immd
         end
     end
@@ -586,10 +613,10 @@ module MULDIV_unit(
 
     parameter len = 32;
     parameter S_IDLE = 2'b00, S_ONE_CYCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
+    parameter IDLE = 0, MUL_MODE = 1, DIV_MODE = 2, SL1_MODE = 3;
 
     //valid means the muldiv_unit should work now
     input mul_clk, mul_rst_n, mul_valid;
-    parameter IDLE = 0, MUL_MODE = 1, DIV_MODE = 2, SL1_MODE = 3;
     input [1:0] mul_mode; //mode=0 IDLE, mode=1 MUL, mode=2 DIV
     input [len-1:0] mul_rs1, mul_rs2;
     output [2*len-1:0] mul_data;
@@ -598,8 +625,8 @@ module MULDIV_unit(
     
     // Todo: HW2
     //the input would have "mul" as prefix
-    reg [2*len-1:0] operand_a, operand_a_nxt;
-    reg [2*len-1:0] operand_b, operand_b_nxt;
+    reg [2*len-1:0] operand_a;
+    reg [2*len-1:0] operand_b;
     reg [1:0] mode, mode_nxt;
     reg [2*len-1:0] out_result; //this would finally connect to output
     reg [2*len:0] mul_temp_result, mul_temp_result_nxt;  //this would deal with overflow prob
@@ -634,7 +661,7 @@ module MULDIV_unit(
             end
             else begin
                 //hold everthin
-                mode <= mul_mode;
+                mode <= mode_nxt;
                 mode_nxt <= mul_mode;
                 mul_temp_result <= mul_temp_result_nxt;
             end
