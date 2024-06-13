@@ -23,13 +23,6 @@ module CHIP #(                                                                  
         output              o_proc_finish                                                       //
 );                                                                                              //
 //----------------------------- DO NOT MODIFY THE I/O INTERFACE!! ------------------------------//
-//◆ auipc, jal, jalr
-//◆ add, sub, and, xor
-//◆ addi, slli, slti, srai
-//◆ lw, sw
-//◆ mul
-//◆ beq, bge, blt, bne
-//◆ ecall (the end of program)
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Parameters
@@ -223,11 +216,12 @@ module CHIP #(                                                                  
                         {ADD_FUNCT3, ADD_FUNCT7}: begin
                             wrt_to_rd = 1;
                             write_data = $signed(rs1_data) + $signed(rs2_data);
-                            // dealing with overflow
+                            //should deal overflow
                         end
                         {SUB_FUNCT3, SUB_FUNCT7}: begin
                             wrt_to_rd = 1;
                             write_data = $signed(rs1_data) - $signed(rs2_data);
+                            //should deal overflow
                         end
                         {AND_FUNCT3, ADD_FUNCT7}: begin
                             wrt_to_rd = 1;
@@ -262,18 +256,17 @@ module CHIP #(                                                                  
                             wrt_to_rd = 0;
                             mul_in_a = rs1_data;
                             mul_in_b = rs2_data;
-                            //$display("mul_valid = %d", mul_valid);
                             if (mul_ready) begin
                                 next_PC = PC + 4;
                                 wrt_to_rd = 1;
-                                mul_mode = 3;
-                                mul_valid = 0;
+                                mul_mode = 3;//IDLE
+                                mul_valid = 0;//output done
                             end
                             else begin
                                 next_PC = PC;
-                                mul_mode = 2;
-                                mul_valid = 1;
                                 wrt_to_rd = 0;
+                                mul_mode = 2;//MUL
+                                mul_valid = 1;//ready to mul next cycle
                             end
                             write_data = mul_result[BIT_W-1:0];
                         end
@@ -315,7 +308,7 @@ module CHIP #(                                                                  
                     dmem_addr = $signed(rs1_data) + $signed(immd);
                     write_data = i_DMEM_rdata;
                     wrt_to_rd = 1;
-                    if(!i_DMEM_stall && stall_counter > 0) begin
+                    if(stall_counter > 0) begin
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 0;
                     end
@@ -330,7 +323,7 @@ module CHIP #(                                                                  
                     dmem_addr = $signed(rs1_data) + $signed(immd);
                     mem_wdata = rs2_data;
                     wrt_to_rd = 0;
-                    if(!i_DMEM_stall && stall_counter > 0) begin
+                    if(stall_counter > 0) begin
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 0;
                     end
@@ -724,6 +717,8 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
     // Todo: your HW2
     // Definition of ports
     parameter BIT_W = 32;
+    parameter S_IDLE = 2'b00, S_ONE_CYCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
+    parameter IDLE = 2'b11, MUL_MODE = 2'b10, DIV_MODE = 2'b01, SL1_MODE = 2'b00;
     input clk, rst_n, valid;
     input [1:0] mode; // 0: shift left, 1: div, 2: mul, 3:IDLE
     output ready;
@@ -732,7 +727,6 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
 
     // definition of state
     reg [1:0] state, state_nxt;
-    parameter S_IDLE = 2'b00, S_ONE_CYCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
 
     // definition of internal signals
     reg [2*BIT_W-1:0] alu_out, operand_a, operand_b;
@@ -837,11 +831,11 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
             operand_a = rs1_data;
             operand_b = rs2_data;
             case(mode_now)
-                2'b00: begin
+                SL1_MODE: begin
                     temp_nxt = operand_a << operand_b;
                 end
                 /*
-                2'b01: begin//div
+                DIV_MODE: begin//div
                     if(counter == 1) begin
                         temp = {32'h0000_0000, operand_a[BIT_W-1:0]};
                         //temp_1 = {operand_b[BIT_W-1:0], 32'h0000_0000};
@@ -866,28 +860,21 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, out);
                     end
                 end
                 */
-                2'b10: begin
+                MUL_MODE: begin
                     //$display("counter = %d", (counter-1));
                     //$display("operand_b[counter] = %d", operand_b[(counter-1)]);
                     //$display("operand_a = %d", operand_a);
                     if(operand_b[(counter-1)]) begin
                         temp_nxt = temp + (operand_a <<< (counter-1));
                     end
-                    else begin
-                        temp_nxt = alu_out;
-                    end
+                    else temp_nxt = temp;
                 end
-                default: begin
-                    temp_nxt = 64'h0000_0000_0000_0000;
-                end
-            endcase
+                default: temp_nxt = 64'h0000_0000_0000_0000;
+                endcase
         end
-        else begin
-            temp_nxt = 64'h0000_0000_0000_0000;
-        end
+        else temp_nxt = 64'h0000_0000_0000_0000;
         alu_out = temp;
     end
-
 endmodule
 
 module Cache#(
