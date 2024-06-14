@@ -1,4 +1,4 @@
-//version 1
+//version 2
 //----------------------------- DO NOT MODIFY THE I/O INTERFACE!! ------------------------------//
 module CHIP #(                                                                                  //
     parameter BIT_W = 32                                                                        //
@@ -24,14 +24,6 @@ module CHIP #(                                                                  
         output              o_proc_finish                                                       //
 );                                                                                              //
 //----------------------------- DO NOT MODIFY THE I/O INTERFACE!! ------------------------------//
-//◆ auipc, jal, jalr
-//◆ add, sub, and, xor
-//◆ addi, slli, slti, srai
-//◆ lw, sw
-//◆ mul
-//◆ beq, bge, blt, bne
-//◆ ecall (the end of program)
-
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Parameters
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -725,6 +717,7 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
     // Todo: your HW2
     // Definition of ports
     parameter BIT_W = 32;
+    parameter S_IDLE = 2'b00, S_ONE_CYCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
     input clk, rst_n, valid;
     input [1:0] mode; // 0: shift left, 1: div, 2: mul, 3:IDLE
     output ready;
@@ -733,48 +726,47 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
 
     // definition of state
     reg [1:0] state, state_nxt;
-    parameter S_IDLE = 2'b00, S_ONE_CYCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
 
     // definition of internal signals
     reg [2*BIT_W-1:0] alu_out, operand_a, operand_b;
-    reg [5:0] counter, counter_nxt;
+    reg [5:0] cnt, cnt_nxt;
     reg rdy, rdy_nxt;
     reg [1:0] mode_now, mode_nxt;
-    reg [2*BIT_W-1: 0] temp, temp_nxt;
+    reg [2*BIT_W-1: 0] tmp, tmp_nxt;
     assign ready = rdy;
     assign rd_data = alu_out;
 
     always @(negedge clk) begin
-        if (valid && counter == 0 && rst_n && rdy == 0) begin
+        if (valid && cnt == 0 && rst_n && rdy == 0) begin
             mode_now <= mode;
             mode_nxt <= mode;
-            counter <= 1;
+            cnt <= 1;
             state <= state_nxt;
             rdy <= 0;
-            temp <= temp_nxt;
+            tmp <= tmp_nxt;
         end
         else if(rst_n)begin
-            if (counter == 33) begin
+            if (cnt == 33) begin
                 mode_now <= 3;
                 mode_nxt <= 3;
-                temp <= temp_nxt;
+                tmp <= tmp_nxt;
             end
             else begin
                 mode_now <= mode_nxt;
                 mode_nxt <= mode;
-                temp <= temp_nxt;
+                tmp <= tmp_nxt;
             end
-            counter <= counter_nxt;
+            cnt <= cnt_nxt;
             state <= state_nxt;
             rdy <= rdy_nxt;
         end
         else begin
             mode_now <= 3;
             mode_nxt <= 3;
-            counter <= 0;
+            cnt <= 0;
             state <= S_IDLE;
             rdy <= 0;
-            temp <= 0;
+            tmp <= 0;
         end
     end
 
@@ -801,7 +793,7 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
             end
             S_ONE_CYCLE_OP: state_nxt = S_IDLE;
             S_MULTI_CYCLE_OP: begin
-                if(counter == 33) state_nxt = S_IDLE;
+                if(cnt == 33) state_nxt = S_IDLE;
                 else state_nxt = S_MULTI_CYCLE_OP;
             end
             default: state_nxt = state;
@@ -810,83 +802,83 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
 
     always @(*) begin
         if (state == S_MULTI_CYCLE_OP) begin
-            if(counter == 32) begin
+            if(cnt == 32) begin
                 rdy_nxt = 1;
-                counter_nxt = 33;
+                cnt_nxt = 33;
             end
-            else if(counter > 32) begin
+            else if(cnt > 32) begin
                 rdy_nxt = 0;
-                counter_nxt = 0;
+                cnt_nxt = 0;
             end
             else begin
                 rdy_nxt = 0;
-                counter_nxt = counter + 1;
+                cnt_nxt = cnt + 1;
             end
         end
         else if (state == S_ONE_CYCLE_OP) begin
             rdy_nxt = 1;
-            counter_nxt = 0;
+            cnt_nxt = 0;
         end
         else begin
             rdy_nxt = 0;
-            counter_nxt = 0;
+            cnt_nxt = 0;
         end
     end
 
     always @(*) begin
-        if(rst_n && valid && counter > 0) begin
+        if(rst_n && valid && cnt > 0) begin
             operand_a = rs1_data;
             operand_b = rs2_data;
             case(mode_now)
                 2'b00: begin
-                    temp_nxt = operand_a << operand_b;
+                    tmp_nxt = operand_a << operand_b;
                 end
                 /*
                 2'b01: begin//div
-                    if(counter == 1) begin
-                        temp = {32'h0000_0000, operand_a[BIT_W-1:0]};
+                    if(cnt == 1) begin
+                        tmp = {32'h0000_0000, operand_a[BIT_W-1:0]};
                         //temp_1 = {operand_b[BIT_W-1:0], 32'h0000_0000};
                         if({32'h0000_0000, operand_a[30:0], 1'b0} >= {operand_b[BIT_W-1:0], 32'h0000_0000}) begin
-                            temp_nxt = temp - //temp_1 + 1'b1;
+                            tmp_nxt = tmp - //temp_1 + 1'b1;
                         end
                         else begin
-                            temp_nxt = temp;
+                            tmp_nxt = tmp;
                         end
                     end
                     else begin
                         //temp_1 = //temp_1;
-                        temp = {temp[62:0], 1'b0};
-                        if(temp >= //temp_1) begin
-                            $display ("temp = %d", temp);
+                        tmp = {tmp[62:0], 1'b0};
+                        if(tmp >= //temp_1) begin
+                            $display ("tmp = %d", tmp);
                             $display ("//temp_1 = %d", //temp_1);
-                            temp_nxt = temp - //temp_1 + 1'b1;
+                            tmp_nxt = tmp - //temp_1 + 1'b1;
                         end
                         else begin
-                            temp_nxt = temp;
+                            tmp_nxt = tmp;
                         end
                     end
                 end
                 */
                 2'b10: begin
-                    //$display("counter = %d", (counter-1));
-                    //$display("operand_b[counter] = %d", operand_b[(counter-1)]);
+                    //$display("cnt = %d", (cnt-1));
+                    //$display("operand_b[cnt] = %d", operand_b[(cnt-1)]);
                     //$display("operand_a = %d", operand_a);
-                    if(operand_b[(counter-1)]) begin
-                        temp_nxt = temp + (operand_a <<< (counter-1));
+                    if(operand_b[(cnt-1)]) begin
+                        tmp_nxt = tmp + (operand_a <<< (cnt-1));
                     end
                     else begin
-                        temp_nxt = temp;
+                        tmp_nxt = tmp;
                     end
                 end
                 default: begin
-                    temp_nxt = 64'h0000_0000_0000_0000;
+                    tmp_nxt = 64'h0000_0000_0000_0000;
                 end
             endcase
         end
         else begin
-            temp_nxt = 64'h0000_0000_0000_0000;
+            tmp_nxt = 64'h0000_0000_0000_0000;
         end
-        alu_out = temp;
+        alu_out = tmp;
     end
 
 endmodule
