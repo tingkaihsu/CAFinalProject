@@ -197,18 +197,26 @@ module CHIP #(                                                                  
             case(opcode) 
                 AUIPC: begin //auipc
                     wrt_to_rd = 1;
-                    immd[19:0] = instr[BIT_W-1:12];
-                    write_data = PC + {immd[BIT_W-1:12], 12'b0};
+                    // immd[19:0] = instr[BIT_W-1:12];
+                    // write_data = PC + {immd[BIT_W-1:12], 12'b0};
+                    immd[BIT_W-1:12] = instr[BIT_W-1:12];
+                    immd[11:0] = 12'b0;
+                    write_data = PC + immd;
                 end
                 JAL: begin //jal
                     wrt_to_rd = 1;
-                    next_PC = $signed(PC) + $signed({instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0});
+                    immd = {instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0};
+                    immd[BIT_W-1:21] = (instr[BIT_W-1])? 11'b11111111111:0;//sign extension
+                    // next_PC = $signed(PC) + $signed({instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0});
+                    next_PC = $signed(PC) + $signed(immd);
                     write_data = PC + 4;
                 end
                 JALR: begin //jalr
                     wrt_to_rd = 1;
                     immd[11:0] = instr[BIT_W-1:20];
-                    next_PC = $signed(rs1_data) + $signed(immd[11:0]);
+                    immd[BIT_W-1:12] = (instr[BIT_W-1])? 20'b11111111111111111111 : 0;//signed extension
+                    // next_PC = $signed(rs1_data) + $signed(immd[11:0]);
+                    next_PC = $signed(rs1_data) + $signed(immd);
                     write_data = PC + 4;
                 end
                 ASAXM: begin // add, sub, and, xor
@@ -281,19 +289,30 @@ module CHIP #(                                                                  
                     case (func3)
                         ADDI_FUNCT3: begin //addi
                             wrt_to_rd = 1;
-                            write_data = $signed(rs1_data) + $signed(instr[BIT_W-1:20]);
+                            immd[11:0] = instr[BIT_W-1:20];
+                            immd[BIT_W-1:12] = (instr[BIT_W-1])? 20'b11111111111111111111 : 0;
+                            // write_data = $signed(rs1_data) + $signed(instr[BIT_W-1:20]);
+                            write_data = $signed(rs1_data) + $signed(immd);
                         end
                         SLLI_FUNCT3: begin //slli
                             wrt_to_rd = 1;
-                            write_data = rs1_data << $unsigned(instr[24:20]);
+                            immd[4:0] = instr[24:20];
+                            immd[BIT_W-1:5] = (instr[24])? 27'b111111111111111111111111111 : 0;
+                            write_data = rs1_data << $unsigned(instr[24:20]);//seems don't need signed extension
+                            // write_data = rs1_data << $unsigned(immd);
                         end
                         SLTI_FUNCT3: begin //slti
                             wrt_to_rd = 1;
-                            write_data = ($signed(rs1_data) < $signed(instr[BIT_W-1:20]))? 1 : 0;
+                            immd[11:0] = instr[BIT_W-1:20];
+                            immd[BIT_W-1:12] = (instr[BIT_W-1])? 20'b11111111111111111111 : 0;
+                            // write_data = ($signed(rs1_data) < $signed(instr[BIT_W-1:20]))? 1 : 0;
+                            write_data = ($signed(rs1_data) < $signed(immd))? 1 : 0;
                         end
                         SRAI_FUNCT3: begin //srai
                             wrt_to_rd = 1;
-                            write_data = rs1_data >> $unsigned(instr[24:20]);
+                            immd[4:0] = instr[24:20];
+                            immd[BIT_W-1:5] = (instr[24])? 27'b111111111111111111111111111 : 0;
+                            write_data = rs1_data >> $unsigned(instr[24:20]);//seems don't need sign extension
                         end
                         default: begin
                             next_PC = PC + 4;
@@ -304,7 +323,8 @@ module CHIP #(                                                                  
                     endcase
                 end
                 LW: begin 
-                    immd = instr[BIT_W-1:20];
+                    immd[11:0] = instr[BIT_W-1:20];
+                    immd[BIT_W-1:12] = (instr[BIT_W-1])? 20'b11111111111111111111 : 0;
                     dmem_addr = $signed(rs1_data) + $signed(immd);
                     write_data = i_DMEM_rdata;
                     wrt_to_rd = 1;
@@ -320,6 +340,7 @@ module CHIP #(                                                                  
                 end
                 SW: begin
                     immd = {instr[BIT_W-1:25], instr[11:7]};
+                    immd[BIT_W-1:12] = (instr[BIT_W-1])? 20'b11111111111111111111 : 0;
                     dmem_addr = $signed(rs1_data) + $signed(immd);
                     mem_wdata = rs2_data;
                     wrt_to_rd = 0;
@@ -335,6 +356,7 @@ module CHIP #(                                                                  
                 end
                 BRNCH: begin //beq, bge, blt, bne
                     immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
+                    immd[BIT_W-1:13] = (instr[BIT_W-1])? 20'b11111111111111111111 : 0;
                     case(func3)
                         BEQ_FUNCT3: begin //beq
                             if(rs1_data == rs2_data) next_PC = $signed(PC) + $signed(immd);
