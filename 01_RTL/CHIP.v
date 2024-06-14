@@ -1,4 +1,4 @@
-//version 2
+//version working
 //----------------------------- DO NOT MODIFY THE I/O INTERFACE!! ------------------------------//
 module CHIP #(                                                                                  //
     parameter BIT_W = 32                                                                        //
@@ -195,31 +195,7 @@ module CHIP #(                                                                  
             write_data = 0;
             immd = 0;
             case(opcode) 
-                AUIPC: begin //auipc
-                    wrt_to_rd = 1;
-                    // immd[19:0] = instr[BIT_W-1:12];
-                    // write_data = PC + {immd[BIT_W-1:12], 12'b0};
-                    immd[BIT_W-1:12] = instr[BIT_W-1:12];
-                    immd[11:0] = 12'b0;
-                    write_data = PC + immd;
-                end
-                JAL: begin //jal
-                    wrt_to_rd = 1;
-                    immd = {instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0};
-                    immd[BIT_W-1:21] = (instr[BIT_W-1])? 11'b11111111111:0;//sign extension
-                    // next_PC = $signed(PC) + $signed({instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0});
-                    next_PC = $signed(PC) + $signed(immd);
-                    write_data = PC + 4;
-                end
-                JALR: begin //jalr
-                    wrt_to_rd = 1;
-                    immd[11:0] = instr[BIT_W-1:20];
-                    immd[BIT_W-1:12] = (instr[BIT_W-1])? 20'b11111111111111111111 : 0;//signed extension
-                    // next_PC = $signed(rs1_data) + $signed(immd[11:0]);
-                    next_PC = $signed(rs1_data) + $signed(immd);
-                    write_data = PC + 4;
-                end
-                ASAXM: begin // add, sub, and, xor
+                ASAXM: begin // add, sub, and, xor, mul
                     case({func3, func7})
                         {ADD_FUNCT3, ADD_FUNCT7}: begin
                             wrt_to_rd = 1;
@@ -238,46 +214,43 @@ module CHIP #(                                                                  
                             wrt_to_rd = 1;
                             write_data = rs1_data ^ rs2_data;
                         end
-                        /*
-                        {DIV_FUNCT3, DIV_FUNCT7}: begin
-                            wrt_to_rd = 0;
-                            mul_in_a = rs1_data;
-                            mul_in_b = rs2_data;
-                            //$display("mul_valid = %d", mul_valid);
-                            if (mul_ready) begin
-                                next_PC = PC + 4;
-                                wrt_to_rd = 1;
-                                mul_mode = 3;
-                                mul_valid = 0;
-                            end
-                            else begin
-                                next_PC = PC;
-                                mul_mode = 1;
-                                mul_valid = 1;
-                                wrt_to_rd = 0;
-                            end
-                            write_data = mul_result[BIT_W-1:0];
-                        end
-                        */
                         {MUL_FUNCT3, MUL_FUNCT7}: begin
                             wrt_to_rd = 0;
                             mul_in_a = rs1_data;
                             mul_in_b = rs2_data;
-                            //$display("mul_valid = %d", mul_valid);
                             if (mul_ready) begin
                                 next_PC = PC + 4;
                                 wrt_to_rd = 1;
-                                mul_mode = 3;
-                                mul_valid = 0;
+                                mul_mode = 0;//IDLE
+                                mul_valid = 0;//deactivate muldiv unit
                             end
                             else begin
-                                next_PC = PC;
-                                mul_mode = 2;
-                                mul_valid = 1;
+                                next_PC = PC;//stall
+                                mul_mode = 1;//MUL
+                                mul_valid = 1;//activate muldiv unit
                                 wrt_to_rd = 0;
                             end
                             write_data = mul_result[BIT_W-1:0];
                         end
+                        // {DIV_FUNCT3, DIV_FUNCT7}: begin
+                        //     wrt_to_rd = 0;
+                        //     mul_in_a = rs1_data;
+                        //     mul_in_b = rs2_data;
+                        //     //$display("mul_valid = %d", mul_valid);
+                        //     if (mul_ready) begin
+                        //         next_PC = PC + 4;
+                        //         wrt_to_rd = 1;
+                        //         mul_mode = 0;//IDLE
+                        //         mul_valid = 0;//deactivate
+                        //     end
+                        //     else begin
+                        //         next_PC = PC;
+                        //         mul_mode = 2;//DIV
+                        //         mul_valid = 1;//activate MULDIV unit
+                        //         wrt_to_rd = 0;
+                        //     end
+                        //     write_data = mul_result[BIT_W-1:0];
+                        // end
                         default: begin
                             next_PC = PC + 4;
                             wrt_to_rd = 0;
@@ -379,6 +352,30 @@ module CHIP #(                                                                  
                         end
                     endcase
                 end
+                AUIPC: begin
+                    wrt_to_rd = 1;
+                    // immd[19:0] = instr[BIT_W-1:12];
+                    // write_data = PC + {immd[BIT_W-1:12], 12'b0};
+                    immd[BIT_W-1:12] = instr[BIT_W-1:12];
+                    immd[11:0] = 12'b0;
+                    write_data = PC + immd;
+                end
+                JAL: begin
+                    wrt_to_rd = 1;
+                    immd = {instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0};
+                    immd[BIT_W-1:21] = (instr[BIT_W-1])? 11'b11111111111:0;//sign extension
+                    // next_PC = $signed(PC) + $signed({instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0});
+                    next_PC = $signed(PC) + $signed(immd);
+                    write_data = PC + 4;
+                end
+                JALR: begin
+                    wrt_to_rd = 1;
+                    immd[11:0] = instr[BIT_W-1:20];
+                    immd[BIT_W-1:12] = (instr[BIT_W-1])? 20'b11111111111111111111 : 0;//signed extension
+                    // next_PC = $signed(rs1_data) + $signed(immd[11:0]);
+                    next_PC = $signed(rs1_data) + $signed(immd);
+                    write_data = PC + 4;
+                end
                 ECALL: begin //ecall
                     wrt_to_rd = 0;
                     finish = 1;
@@ -432,262 +429,6 @@ module CHIP #(                                                                  
             end
             immd = 0;
         end
-
-        // if(i_DMEM_stall) begin
-        //     finish = 0;
-        //     wrt_to_rd = 0;
-        //     mem_cen_nxt = 0;
-        //     mem_wen_nxt = 0;
-        //     opcode = instr[6:0];
-        //     func3 = instr[14:12];
-        //     func7 = instr[BIT_W-1:25];
-        //     rs1 = instr[19:15];
-        //     rs2 = instr[24:20];
-        //     rd = instr[11:7];
-        //     mul_valid = 0;
-        //     mul_mode = 3;
-        //     mul_in_a = 0;
-        //     mul_in_b = 0;
-        //     wrt_to_rd = 0;
-        //     mem_wdata = rs2_data;
-        //     if(opcode == LW) begin
-        //         immd = instr[BIT_W-1:20];
-        //         dmem_addr = $signed(rs1_data) + $signed(immd);
-        //     end
-        //     else if(opcode == SW) begin
-        //         immd = {instr[BIT_W-1:25], instr[11:7]};
-        //         dmem_addr = $signed(rs1_data) + $signed(immd);
-        //     end
-        //     else begin
-        //         dmem_addr = 0;
-        //     end
-        //     write_data = 0;
-        //     immd = 0;
-        // end
-        // else if(i_rst_n)begin
-        //     finish = 0;
-        //     opcode = instr[6:0];
-        //     func3 = instr[14:12];
-        //     func7 = instr[BIT_W-1:25];
-        //     rs1 = instr[19:15];
-        //     rs2 = instr[24:20];
-        //     rd = instr[11:7];
-        //     wrt_to_rd = 0;
-        //     mul_valid = 0;
-        //     mul_mode = 3;
-        //     mul_in_a = 0;
-        //     mul_in_b = 0;
-        //     dmem_addr = 0;
-        //     mem_wdata = 0;
-        //     mem_rdata = 0;
-        //     mem_cen_nxt = 0;
-        //     mem_wen_nxt = 0;
-        //     write_data = 0;
-        //     immd = 0;
-        //     case(opcode) 
-        //         AUIPC: begin //auipc
-        //             wrt_to_rd = 1;
-        //             immd[19:0] = instr[BIT_W-1:12];
-        //             write_data = PC + {immd[BIT_W-1:12], 12'b0};
-        //         end
-        //         JAL: begin //jal
-        //             wrt_to_rd = 1;
-        //             next_PC = $signed(PC) + $signed({instr[BIT_W-1], instr[19:12], instr[20], instr[30:21], 1'b0});
-        //             write_data = PC + 4;
-        //         end
-        //         JALR: begin //jalr
-        //             wrt_to_rd = 1;
-        //             immd[11:0] = instr[BIT_W-1:20];
-        //             next_PC = $signed(rs1_data) + $signed(immd[11:0]);
-        //             write_data = PC + 4;
-        //         end
-        //         ASAXM: begin // add, sub, and, xor
-        //             case({func3, func7})
-        //                 {ADD_FUNCT3, ADD_FUNCT7}: begin
-        //                     wrt_to_rd = 1;
-        //                     write_data = $signed(rs1_data) + $signed(rs2_data);
-        //                     // dealing with overflow
-        //                 end
-        //                 {SUB_FUNCT3, SUB_FUNCT7}: begin
-        //                     wrt_to_rd = 1;
-        //                     write_data = $signed(rs1_data) - $signed(rs2_data);
-        //                 end
-        //                 {AND_FUNCT3, ADD_FUNCT7}: begin
-        //                     wrt_to_rd = 1;
-        //                     write_data = rs1_data & rs2_data;
-        //                 end
-        //                 {XOR_FUNCT3, XOR_FUNCT7}: begin
-        //                     wrt_to_rd = 1;
-        //                     write_data = rs1_data ^ rs2_data;
-        //                 end
-        //                 /*
-        //                 {DIV_FUNCT3, DIV_FUNCT7}: begin
-        //                     wrt_to_rd = 0;
-        //                     mul_in_a = rs1_data;
-        //                     mul_in_b = rs2_data;
-        //                     //$display("mul_valid = %d", mul_valid);
-        //                     if (mul_ready) begin
-        //                         next_PC = PC + 4;
-        //                         wrt_to_rd = 1;
-        //                         mul_mode = 3;
-        //                         mul_valid = 0;
-        //                     end
-        //                     else begin
-        //                         next_PC = PC;
-        //                         mul_mode = 1;
-        //                         mul_valid = 1;
-        //                         wrt_to_rd = 0;
-        //                     end
-        //                     write_data = mul_result[BIT_W-1:0];
-        //                 end
-        //                 */
-        //                 {MUL_FUNCT3, MUL_FUNCT7}: begin
-        //                     wrt_to_rd = 0;
-        //                     mul_in_a = rs1_data;
-        //                     mul_in_b = rs2_data;
-        //                     //$display("mul_valid = %d", mul_valid);
-        //                     if (mul_ready) begin
-        //                         next_PC = PC + 4;
-        //                         wrt_to_rd = 1;
-        //                         mul_mode = 3;
-        //                         mul_valid = 0;
-        //                     end
-        //                     else begin
-        //                         next_PC = PC;
-        //                         mul_mode = 2;
-        //                         mul_valid = 1;
-        //                         wrt_to_rd = 0;
-        //                     end
-        //                     write_data = mul_result[BIT_W-1:0];
-        //                 end
-        //                 default: begin
-        //                     next_PC = PC + 4;
-        //                     wrt_to_rd = 0;
-        //                     write_data = 0;
-        //                 end
-        //             endcase
-        //         end
-        //         IMMD_OP: begin
-        //             case (func3)
-        //                 ADDI_FUNCT3: begin //addi
-        //                     wrt_to_rd = 1;
-        //                     write_data = $signed(rs1_data) + $signed(instr[BIT_W-1:20]);
-        //                 end
-        //                 SLLI_FUNCT3: begin //slli
-        //                     wrt_to_rd = 1;
-        //                     write_data = rs1_data << $unsigned(instr[24:20]);
-        //                 end
-        //                 SLTI_FUNCT3: begin //slti
-        //                     wrt_to_rd = 1;
-        //                     write_data = ($signed(rs1_data) < $signed(instr[BIT_W-1:20]))? 1 : 0;
-        //                 end
-        //                 SRAI_FUNCT3: begin //srai
-        //                     wrt_to_rd = 1;
-        //                     write_data = rs1_data >> $unsigned(instr[24:20]);
-        //                 end
-        //                 default: begin
-        //                     next_PC = PC + 4;
-        //                     wrt_to_rd = 0;
-        //                     write_data = 0;
-        //                     immd = 0;
-        //                 end
-        //             endcase
-        //         end
-        //         LW: begin 
-        //             immd = instr[BIT_W-1:20];
-        //             dmem_addr = $signed(rs1_data) + $signed(immd);
-        //             write_data = i_DMEM_rdata;
-        //             wrt_to_rd = 1;
-        //             if(!i_DMEM_stall && stall_counter > 0) begin
-        //                 mem_wen_nxt = 0;
-        //                 mem_cen_nxt = 0;
-        //             end
-        //             else begin
-        //                 mem_wen_nxt = 0;
-        //                 mem_cen_nxt = 1;
-        //                 next_PC = PC;
-        //             end
-        //         end
-        //         SW: begin
-        //             immd = {instr[BIT_W-1:25], instr[11:7]};
-        //             dmem_addr = $signed(rs1_data) + $signed(immd);
-        //             mem_wdata = rs2_data;
-        //             wrt_to_rd = 0;
-        //             if(!i_DMEM_stall && stall_counter > 0) begin
-        //                 mem_wen_nxt = 0;
-        //                 mem_cen_nxt = 0;
-        //             end
-        //             else begin
-        //                 mem_cen_nxt = 1;
-        //                 mem_wen_nxt = 1;
-        //                 next_PC = PC;
-        //             end
-        //         end
-        //         BRNCH: begin //beq, bge, blt, bne
-        //             immd = {instr[BIT_W-1], instr[7], instr[30:25], instr[11:8], 1'b0};
-        //             case(func3)
-        //                 BEQ_FUNCT3: begin //beq
-        //                     if(rs1_data == rs2_data) next_PC = $signed(PC) + $signed(immd);
-        //                     else next_PC = PC + 4;
-        //                 end
-        //                 BGE_FUNCT3: begin //bge
-        //                     if($signed(rs1_data) >= $signed(rs2_data)) next_PC = $signed(PC) + $signed(immd);
-        //                     else next_PC = PC + 4;
-        //                 end
-        //                 BLT_FUNCT3: begin //blt
-        //                     if($signed(rs1_data) < $signed(rs2_data)) next_PC = $signed(PC) + $signed(immd);
-        //                     else next_PC = PC + 4;
-        //                 end
-        //                 BNE_FUNCT3: begin //bne
-        //                     if(rs1_data != rs2_data) next_PC = $signed(PC) + $signed(immd);
-        //                     else next_PC = PC + 4;
-        //                 end
-        //                 default: begin
-        //                     next_PC = PC + 4;
-        //                 end
-        //             endcase
-        //         end
-        //         ECALL: begin //ecall
-        //             wrt_to_rd = 0;
-        //             finish = 1;
-        //         end
-        //         default: begin
-        //             next_PC = PC + 4;
-        //             wrt_to_rd = 0;
-        //             write_data = 0;
-        //             immd = 0;
-        //             finish = 0;
-        //             dmem_addr = 0;
-        //             mem_wdata = 0;
-        //             mem_rdata = 0;
-        //             mem_cen_nxt = 0;
-        //             mem_wen_nxt = 0;
-        //         end
-        //     endcase
-        // end
-        // else begin
-        //     next_PC = 0;
-        //     finish = 0;
-        //     opcode = 0;
-        //     func3 = 0;
-        //     func7 = 0;
-        //     rs1 = 0;
-        //     rs2 = 0;
-        //     rd = 0;
-        //     wrt_to_rd = 0;
-        //     mul_valid = 0;
-        //     mul_mode = 3;
-        //     mul_in_a = 0;
-        //     mul_in_b = 0;
-        //     dmem_addr = 0;
-        //     mem_wdata = 0;
-        //     mem_rdata = 0;
-        //     mem_cen_nxt = 0;
-        //     mem_wen_nxt = 0;
-        //     write_data = 0;
-        //     immd = 0;
-        // end
-        // $display("well done!");
     end
 endmodule
 
@@ -740,8 +481,10 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
     // Definition of ports
     parameter BIT_W = 32;
     parameter S_IDLE = 2'b00, S_ONE_CYCLE_OP = 2'b01, S_MULTI_CYCLE_OP = 2'b10;
+    parameter MUL_MODE = 2'b01, IDLE = 2'b00, DIV_MODE = 2'b10;
+    
     input clk, rst_n, valid;
-    input [1:0] mode; // 0: shift left, 1: div, 2: mul, 3:IDLE
+    input [1:0] mode; // 0: IDLE, 1: MUL, 2: DIV
     output ready;
     input [BIT_W-1:0] rs1_data, rs2_data;
     output [2*BIT_W-1:0] rd_data;
@@ -759,7 +502,7 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
     assign rd_data = alu_out;
 
     always @(negedge clk) begin
-        if (valid && cnt == 0 && rst_n && rdy == 0) begin
+        if (valid && !cnt && rst_n && !rdy) begin
             mode_now <= mode;
             mode_nxt <= mode;
             cnt <= 1;
@@ -798,13 +541,10 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
                 if(!valid) state_nxt = S_IDLE;
                 else begin
                     case(mode)
-                        2'b00: begin
-                            state_nxt = S_ONE_CYCLE_OP;
-                        end
-                        2'b01: begin
+                        DIV_MODE: begin
                             state_nxt = S_MULTI_CYCLE_OP;
                         end
-                        2'b10: begin
+                        MUL_MODE: begin
                             state_nxt = S_MULTI_CYCLE_OP;
                         end
                         default: begin
@@ -825,19 +565,23 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
     always @(*) begin
         if (state == S_MULTI_CYCLE_OP) begin
             if(cnt == 32) begin
+                //ready to output
                 rdy_nxt = 1;
                 cnt_nxt = 33;
             end
             else if(cnt > 32) begin
+                //illegal state, reset
                 rdy_nxt = 0;
                 cnt_nxt = 0;
             end
             else begin
+                //increase cnt
                 rdy_nxt = 0;
                 cnt_nxt = cnt + 1;
             end
         end
         else if (state == S_ONE_CYCLE_OP) begin
+            //ready to output and reset cnt
             rdy_nxt = 1;
             cnt_nxt = 0;
         end
@@ -852,57 +596,24 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
             operand_a = rs1_data;
             operand_b = rs2_data;
             case(mode_now)
-                2'b00: begin
-                    tmp_nxt = operand_a << operand_b;
-                end
-                /*
-                2'b01: begin//div
-                    if(cnt == 1) begin
-                        tmp = {32'h0000_0000, operand_a[BIT_W-1:0]};
-                        //temp_1 = {operand_b[BIT_W-1:0], 32'h0000_0000};
-                        if({32'h0000_0000, operand_a[30:0], 1'b0} >= {operand_b[BIT_W-1:0], 32'h0000_0000}) begin
-                            tmp_nxt = tmp - //temp_1 + 1'b1;
-                        end
-                        else begin
-                            tmp_nxt = tmp;
-                        end
-                    end
-                    else begin
-                        //temp_1 = //temp_1;
-                        tmp = {tmp[62:0], 1'b0};
-                        if(tmp >= //temp_1) begin
-                            $display ("tmp = %d", tmp);
-                            $display ("//temp_1 = %d", //temp_1);
-                            tmp_nxt = tmp - //temp_1 + 1'b1;
-                        end
-                        else begin
-                            tmp_nxt = tmp;
-                        end
-                    end
-                end
-                */
-                2'b10: begin
-                    //$display("cnt = %d", (cnt-1));
-                    //$display("operand_b[cnt] = %d", operand_b[(cnt-1)]);
-                    //$display("operand_a = %d", operand_a);
-                    if(operand_b[(cnt-1)]) begin
-                        tmp_nxt = tmp + (operand_a <<< (cnt-1));
+                MUL_MODE: begin
+                    if(operand_b[cnt-1]) begin
+                        tmp_nxt = tmp + (operand_a << (cnt-1));
                     end
                     else begin
                         tmp_nxt = tmp;
                     end
                 end
                 default: begin
-                    tmp_nxt = 64'h0000_0000_0000_0000;
+                    tmp_nxt = 64'h0;
                 end
             endcase
         end
         else begin
-            tmp_nxt = 64'h0000_0000_0000_0000;
+            tmp_nxt = 64'h0;
         end
         alu_out = tmp;
     end
-
 endmodule
 
 module Cache#(
