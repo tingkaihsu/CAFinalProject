@@ -9,10 +9,10 @@ def toHex(x):
 
 if __name__ == '__main__':
     # Modify your test pattern here
-    a = 7
-    b = 4
-    c = 1
-    d = 4
+    a = 97
+    b = 25
+    c = 66
+    d = 45
 
     with open('../00_TB/Pattern/I0/mem_D.dat', 'w') as f_data:
         f_data.write(f"{a:08x}\n")

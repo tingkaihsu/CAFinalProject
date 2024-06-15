@@ -9,7 +9,7 @@ def hw1(n):
 
 if __name__ == '__main__':
     # Modify your test pattern here
-    n = 23
+    n = 100
         
     with open('../00_TB/Pattern/I2/mem_D.dat', 'w') as f_data:
         f_data.write(f"{n:08x}\n")
