@@ -512,8 +512,8 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
         end
         else if(rst_n)begin
             if (cnt == 33) begin
-                mode_now <= 3;
-                mode_nxt <= 3;
+                mode_now <= 0;//idle mode
+                mode_nxt <= 0;//idle mode
                 tmp <= tmp_nxt;
             end
             else begin
@@ -526,8 +526,8 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
             rdy <= rdy_nxt;
         end
         else begin
-            mode_now <= 3;
-            mode_nxt <= 3;
+            mode_now <= 0;//idle mode
+            mode_nxt <= 0;//idle mode
             cnt <= 0;
             state <= S_IDLE;
             rdy <= 0;
@@ -555,7 +555,7 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
             end
             // S_ONE_CYCLE_OP: state_nxt = S_IDLE;
             S_MULTI_CYCLE_OP: begin
-                if(cnt == 33) state_nxt = S_IDLE;
+                if(cnt == 33) state_nxt = S_IDLE;//cnt limit
                 else state_nxt = S_MULTI_CYCLE_OP;
             end
             default: state_nxt = state;
@@ -580,11 +580,11 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
                 cnt_nxt = cnt + 1;
             end
         end
-        // else if (state == S_ONE_CYCLE_OP) begin
-        //     //ready to output and reset cnt
-        //     rdy_nxt = 1;
-        //     cnt_nxt = 0;
-        // end
+        else if (state == S_ONE_CYCLE_OP) begin
+            //ready to output and reset cnt
+            rdy_nxt = 1;
+            cnt_nxt = 0;
+        end
         else begin
             rdy_nxt = 0;
             cnt_nxt = 0;
@@ -597,11 +597,11 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
             operand_b = rs2_data;
             case(mode_now)
                 MUL_MODE: begin
-                    if(operand_b[cnt-1]) begin
-                        tmp_nxt = tmp + (operand_a << (cnt-1));
+                    if(operand_b[cnt-1]) begin//if the operand_b[i] bit is 1, we shift the operand_a i bit 
+                        tmp_nxt = tmp + (operand_a << (cnt-1));//i = cnt - 1
                     end
                     else begin
-                        tmp_nxt = tmp;
+                        tmp_nxt = tmp;//if the operand_b[i] is 0
                     end
                 end
                 default: begin
@@ -610,9 +610,9 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
             endcase
         end
         else begin
-            tmp_nxt = 64'h0;
+            tmp_nxt = 64'h0;//reset tmp_nxt
         end
-        alu_out = tmp;
+        alu_out = tmp;//output time
     end
 endmodule
 
