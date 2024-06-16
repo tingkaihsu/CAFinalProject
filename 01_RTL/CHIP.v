@@ -541,9 +541,9 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
                 if(!valid) state_nxt = S_IDLE;
                 else begin
                     case(mode)
-                        DIV_MODE: begin
-                            state_nxt = S_MULTI_CYCLE_OP;
-                        end
+                        // DIV_MODE: begin
+                        //     state_nxt = S_MULTI_CYCLE_OP;
+                        // end
                         MUL_MODE: begin
                             state_nxt = S_MULTI_CYCLE_OP;
                         end
@@ -553,7 +553,7 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
                     endcase
                 end
             end
-            S_ONE_CYCLE_OP: state_nxt = S_IDLE;
+            // S_ONE_CYCLE_OP: state_nxt = S_IDLE;
             S_MULTI_CYCLE_OP: begin
                 if(cnt == 33) state_nxt = S_IDLE;
                 else state_nxt = S_MULTI_CYCLE_OP;
@@ -580,11 +580,11 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
                 cnt_nxt = cnt + 1;
             end
         end
-        else if (state == S_ONE_CYCLE_OP) begin
-            //ready to output and reset cnt
-            rdy_nxt = 1;
-            cnt_nxt = 0;
-        end
+        // else if (state == S_ONE_CYCLE_OP) begin
+        //     //ready to output and reset cnt
+        //     rdy_nxt = 1;
+        //     cnt_nxt = 0;
+        // end
         else begin
             rdy_nxt = 0;
             cnt_nxt = 0;
