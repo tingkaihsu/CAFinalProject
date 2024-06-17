@@ -699,14 +699,16 @@ module Cache#(
     //always blocks
     always @(*) begin
         real_addr = i_proc_addr - i_offset;
-        if (state == S_FINISH) begin
-            idx = cnt;
-            offset = 0;
-            proc_addr = {tag[idx], idx, offset, 2'b00};
-        end
-        else if (state == S_WB) begin
+        if (state == S_WB) begin
             idx = real_addr[7:4];
             offset = 0;
+            //2'b00 is byte offset
+            proc_addr = {tag[idx], idx, offset, 2'b00};
+        end
+        else if (state == S_FINISH) begin
+            idx = cnt;
+            offset = 0;
+            //2'b00 is byte offset
             proc_addr = {tag[idx], idx, offset, 2'b00};
         end
         else begin 
@@ -714,23 +716,19 @@ module Cache#(
             idx = proc_addr[7:4];
             offset = proc_addr[3:2];
         end
+        //if the addr is correct and valid bit is high, hit!
         hit = (tag[idx] == proc_addr[31:8]) & valid[idx];
     end
 
+    //FSM
     always @(*) begin
         case(state)
             S_IDLE: begin
                 finish = 0;
-                if (i_proc_finish) begin
-                    state_nxt = S_FINISH;
-                end
+                if (i_proc_finish) state_nxt = S_FINISH;//ready to finish
                 else begin
-                    if (i_proc_cen) begin
-                        state_nxt = S_FIND;
-                    end
-                    else begin
-                        state_nxt = S_IDLE;
-                    end
+                    if (i_proc_cen) state_nxt = S_FIND;
+                    else state_nxt = S_IDLE;
                 end
             end
             S_FIND: begin
@@ -757,16 +755,16 @@ module Cache#(
                 end
                 else state_nxt = S_ALLO;
             end
-            S_FINISH:   begin
-                if (cnt == (block_number-1) && !i_mem_stall) begin //cnt == block_number means all data is stored
+            S_FINISH: begin
+                if (cnt == (block_number-1) && i_mem_stall == 0) begin
+                    //cnt == block_number means all data memory is stored
                     state_nxt = S_IDLE;
-                    finish = 1;
+                    finish = 1;//ready to finish
                 end
                 else begin
                     state_nxt = S_FINISH;
                     finish = 0;
                 end
-                
             end
             default: begin
                 state_nxt = state;
@@ -817,15 +815,11 @@ module Cache#(
                 else begin
                     proc_stall = 1;
                     data_nxt[idx] = data[idx];
-                    if(wen) begin
-                        dirty_nxt[idx] = 1;
-                    end
-                    else begin
-                        dirty_nxt[idx] = dirty[idx];
-                    end
+                    if(wen) dirty_nxt[idx] = 1;//dirty bit is high
+                    else dirty_nxt[idx] = dirty[idx];//hold the dirty bit
                 end
             end
-            S_WB:   begin
+            S_WB: begin
                 data_nxt[idx] = data[idx];
                 dirty_nxt[idx] = dirty[idx];
                 mem_cen = 1;
@@ -847,7 +841,7 @@ module Cache#(
                 tag_nxt[idx] = proc_addr[31:8];
                 valid_nxt[idx] = 1;
             end
-            S_FINISH:   begin
+            S_FINISH: begin
                 data_nxt[idx] = data[idx];
                 cen_nxt = cen;
                 wen_nxt = wen;
@@ -865,7 +859,7 @@ module Cache#(
                 end
                 proc_stall = 1;
             end
-            default:    begin
+            default: begin
                 data_nxt[idx] = 0;
                 dirty_nxt[idx] = dirty[idx];
                 mem_cen = 0;
@@ -878,36 +872,34 @@ module Cache#(
             end
         endcase
     end
-    
+
     //counter
     always @(posedge i_clk) begin
         if (state == S_FINISH) begin
-            if (!i_mem_stall) begin
-                cnt <= cnt + 1;
-            end
-            else begin
-                cnt <= cnt;
-            end
+            //only count at finish state
+            //only increase when there is no stall
+            if (!i_mem_stall) cnt <= cnt + 1;
+            else cnt <= cnt;
         end
         else cnt <= 0;
     end
 
-    //sequential part
+    //sequential block
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
-            // reset
+            //reset everything
             state <= S_IDLE;
             for (i = 0; i < block_number; i = i+1)begin
                 data[i] <= 0;
                 valid[i] <= 0;
                 tag[i] <= 0;
                 dirty[i] <= 0;
-               
             end
             cen <= 0;
             wen <= 0; 
         end
         else begin
+            //hold everything
             state <= state_nxt;
             if (cen) begin
                 data[idx] <= data_nxt[idx];
