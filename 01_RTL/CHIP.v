@@ -1,4 +1,4 @@
-//cache version
+//final version
 //----------------------------- DO NOT MODIFY THE I/O INTERFACE!! ------------------------------//
 module CHIP #(                                                                                  //
     parameter BIT_W = 32                                                                        //
@@ -775,7 +775,8 @@ module Cache#(
 
     integer i;
     always @(*) begin
-        for (i = 0; (i < block_number) ; i = i + 1) begin
+        //for loop
+        for (i = 0; i < block_number ; i = i + 1) begin
             dirty_nxt[i] = 0;
             tag_nxt[i] = 0;
             valid_nxt[i] = 0;
@@ -801,14 +802,16 @@ module Cache#(
                 tag_nxt[idx] = tag[idx];
                 valid_nxt[idx] = valid[idx];
                 if (hit) begin
-                    if (!wen) begin
-                        data_nxt[idx] = data[idx];
-                        dirty_nxt[idx] = dirty[idx];
-                    end
-                    else begin
+                    if (wen) begin
                         dirty_nxt[idx] = 1;
                         data_nxt[idx] = data[idx];
+                        // data_nxt[idx][ADDR_W*offset+ADDR_W-1 : ADDR_W] = i_proc_wdata;
+                        //but position is variables, so we need special syntax
                         data_nxt[idx][ADDR_W*offset +: ADDR_W] = i_proc_wdata;
+                    end
+                    else begin
+                        data_nxt[idx] = data[idx];
+                        dirty_nxt[idx] = dirty[idx]; 
                     end
                     proc_stall = 0;
                 end
@@ -820,6 +823,7 @@ module Cache#(
                 end
             end
             S_WB: begin
+                //write back stage
                 data_nxt[idx] = data[idx];
                 dirty_nxt[idx] = dirty[idx];
                 mem_cen = 1;
@@ -831,6 +835,7 @@ module Cache#(
                 valid_nxt[idx] = valid[idx];
             end
             S_ALLO: begin
+                //allocation stage
                 data_nxt[idx] = i_mem_rdata;
                 dirty_nxt[idx] = dirty[idx];
                 mem_cen = 1;
@@ -842,21 +847,23 @@ module Cache#(
                 valid_nxt[idx] = 1;
             end
             S_FINISH: begin
+                //finish stage
                 data_nxt[idx] = data[idx];
                 cen_nxt = cen;
                 wen_nxt = wen;
                 tag_nxt[idx] = tag[idx];
                 valid_nxt[idx] = valid[idx];
                 if (dirty[idx]) begin
-                    dirty_nxt[idx] = 0;
+                    //allow to write back mem
                     mem_cen = 1;
                     mem_wen = 1;
                 end
                 else begin
-                    dirty_nxt[idx] = 0;
                     mem_cen = 0;
                     mem_wen = 0;    
                 end
+                //pull low dirty bit
+                dirty_nxt[idx] = 0;
                 proc_stall = 1;
             end
             default: begin
@@ -889,6 +896,7 @@ module Cache#(
         if (!i_rst_n) begin
             //reset everything
             state <= S_IDLE;
+            //for loop to interate over all data and clear up
             for (i = 0; i < block_number; i = i+1)begin
                 data[i] <= 0;
                 valid[i] <= 0;
