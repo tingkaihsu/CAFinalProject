@@ -1,4 +1,4 @@
-//version working
+//cache version
 //----------------------------- DO NOT MODIFY THE I/O INTERFACE!! ------------------------------//
 module CHIP #(                                                                                  //
     parameter BIT_W = 32                                                                        //
@@ -87,7 +87,6 @@ module CHIP #(                                                                  
         reg [BIT_W-1: 0] write_data;
         reg [BIT_W-1: 0] immd;
         reg wrt_to_rd;
-        // wire wrt_to_rd;
         wire mul_ready; //for multi-cycle operation
         reg mul_valid;
         reg [1: 0] mul_mode;
@@ -110,8 +109,10 @@ module CHIP #(                                                                  
     assign o_DMEM_wen = mem_wen;
     assign o_DMEM_addr = dmem_addr;
     assign o_DMEM_wdata = mem_wdata;
-    assign o_finish = finish;
-    // assign wrt_to_rd = wrt_to_rd;
+    //if no cache
+    // assign o_finish = finish;
+    assign o_finish = i_cache_finish;
+    assign o_proc_finish = finish;
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
@@ -169,8 +170,6 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin
-        //$display("PC = %d", PC);
-        //$display("next_PC = %d", next_PC);
         imem_cen = 1;
         instr = i_IMEM_data;
         next_PC = (i_DMEM_stall)? PC : PC+4;
@@ -301,7 +300,7 @@ module CHIP #(                                                                  
                     dmem_addr = $signed(rs1_data) + $signed(immd);
                     write_data = i_DMEM_rdata;
                     wrt_to_rd = 1;
-                    if(!i_DMEM_stall && stall_counter > 0) begin
+                    if(stall_counter > 0) begin
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 0;
                     end
@@ -317,7 +316,7 @@ module CHIP #(                                                                  
                     dmem_addr = $signed(rs1_data) + $signed(immd);
                     mem_wdata = rs2_data;
                     wrt_to_rd = 0;
-                    if(!i_DMEM_stall && stall_counter > 0) begin
+                    if(stall_counter > 0) begin
                         mem_wen_nxt = 0;
                         mem_cen_nxt = 0;
                     end
@@ -597,11 +596,11 @@ module MULDIV_unit(clk, rst_n, valid, ready, mode, rs1_data, rs2_data, rd_data);
             operand_b = rs2_data;
             case(mode_now)
                 MUL_MODE: begin
-                    if(operand_b[cnt-1]) begin//if the operand_b[i] bit is 1, we shift the operand_a i bit 
-                        tmp_nxt = tmp + (operand_a << (cnt-1));//i = cnt - 1
+                    if(operand_b[cnt-1]) begin//if the operand_b[idx] bit is 1, we shift the operand_a idx bit 
+                        tmp_nxt = tmp + (operand_a << (cnt-1));//idx = cnt - 1
                     end
                     else begin
-                        tmp_nxt = tmp;//if the operand_b[i] is 0
+                        tmp_nxt = tmp;//if the operand_b[idx] is 0
                     end
                 end
                 default: begin
@@ -618,43 +617,306 @@ endmodule
 
 module Cache#(
         parameter BIT_W = 32,
-        parameter ADDR_W = 32
+        parameter ADDR_W = 32//address width
     )(
         input i_clk,
         input i_rst_n,
         // processor interface
-            input i_proc_cen,
-            input i_proc_wen,
-            input [ADDR_W-1:0] i_proc_addr,
-            input [BIT_W-1:0]  i_proc_wdata,
-            output [BIT_W-1:0] o_proc_rdata,
-            output o_proc_stall,
-            input i_proc_finish,
-            output o_cache_finish,
-        // memory interface
-            output o_mem_cen,
-            output o_mem_wen,
-            output [ADDR_W-1:0] o_mem_addr,
-            output [BIT_W*4-1:0]  o_mem_wdata,
-            input [BIT_W*4-1:0] i_mem_rdata,
-            input i_mem_stall,
-            output o_cache_available,
-        // others
+        input i_proc_cen,
+        input i_proc_wen,
+        input [ADDR_W-1:0] i_proc_addr,
+        input [BIT_W-1:0]  i_proc_wdata,
+        output [BIT_W-1:0] o_proc_rdata,
+        output o_proc_stall,
+        input i_proc_finish,
+        output o_cache_finish,
+        //memory interface
+        output o_mem_cen,
+        output o_mem_wen,
+        output [ADDR_W-1:0] o_mem_addr,
+        output [BIT_W*4-1:0]  o_mem_wdata,
+        input [BIT_W*4-1:0] i_mem_rdata,
+        input i_mem_stall,
+        output o_cache_available,
+        //offset
         input  [ADDR_W-1: 0] i_offset
     );
 
-    assign o_cache_available = 0; // change this value to 1 if the cache is implemented
+    assign o_cache_available = 1; // change this value to 1 if the cache is implemented
 
-    //------------------------------------------//
-    //          default connection              //
-    assign o_mem_cen = i_proc_cen;              //
-    assign o_mem_wen = i_proc_wen;              //
-    assign o_mem_addr = i_proc_addr;            //
-    assign o_mem_wdata = i_proc_wdata;          //
-    assign o_proc_rdata = i_mem_rdata[0+:BIT_W];//
-    assign o_proc_stall = i_mem_stall;          //
-    //------------------------------------------//
-
+    // //------------------------------------------//
+    // //          default connection              //
+    // assign o_mem_cen = i_proc_cen;              //
+    // assign o_mem_wen = i_proc_wen;              //
+    // assign o_mem_addr = i_proc_addr;            //
+    // assign o_mem_wdata = i_proc_wdata;          //
+    // assign o_proc_rdata = i_mem_rdata[0+:BIT_W];//
+    // assign o_proc_stall = i_mem_stall;          //
+    // //------------------------------------------//
     // Todo: BONUS
+    //parameters:
+    parameter S_IDLE = 3'b00;//000
+    parameter S_FIND = 3'b01;//001
+    parameter S_WB = 3'b10;//010
+    parameter S_ALLO = 3'b011;//011
+    parameter S_FINISH = 3'b100;//100
+    parameter block_number = 16;//optimal block size
 
+    //regs
+    reg [2:0] state, state_nxt;
+    reg hit;//record if hit or not
+    reg mem_cen, mem_wen;
+    reg cen, cen_nxt;
+    reg wen, wen_nxt;
+    reg proc_stall;//stall the process
+    reg [4*BIT_W-1:0] data[0:block_number-1], data_nxt[0:block_number-1];
+    reg [23:0] tag[0:block_number-1], tag_nxt[0:block_number-1];
+    //valid bit record if there is data in cache or not
+    reg valid[0:block_number-1], valid_nxt[0:block_number-1];
+    //dirty bit record if we need to write back to data mem or not
+    reg dirty[0:block_number-1], dirty_nxt[0:block_number-1];
+    reg [3:0] idx, index_nxt;
+    reg [1:0] offset, offset_nxt;
+    reg [3:0] cnt;
+    //finish bit to tell the processor cache search is finished
+    reg finish;
+    reg [ADDR_W-1:0] proc_addr, real_addr;
+
+    //wire assignment
+    assign o_mem_cen = mem_cen;
+    assign o_mem_wen = mem_wen;
+    assign o_mem_addr = proc_addr + i_offset;
+    assign o_mem_wdata = data[idx];
+    assign o_proc_stall = proc_stall;
+
+    wire [ADDR_W-1:0] selected_data;
+    assign selected_data = data[idx] >> (ADDR_W * offset);
+    assign o_proc_rdata = selected_data[ADDR_W-1:0];
+
+    //tell the processor that the cache finish
+    assign o_cache_finish = finish;
+
+    //always blocks
+    always @(*) begin
+        real_addr = i_proc_addr - i_offset;
+        if (state == S_FINISH) begin
+            idx = cnt;
+            offset = 0;
+            proc_addr = {tag[idx], idx, offset, 2'b00};
+        end
+        else if (state == S_WB) begin
+            idx = real_addr[7:4];
+            offset = 0;
+            proc_addr = {tag[idx], idx, offset, 2'b00};
+        end
+        else begin 
+            proc_addr = real_addr;
+            idx = proc_addr[7:4];
+            offset = proc_addr[3:2];
+        end
+        hit = (tag[idx] == proc_addr[31:8]) & valid[idx];
+    end
+
+    always @(*) begin
+        case(state)
+            S_IDLE: begin
+                finish = 0;
+                if (i_proc_finish) begin
+                    state_nxt = S_FINISH;
+                end
+                else begin
+                    if (i_proc_cen) begin
+                        state_nxt = S_FIND;
+                    end
+                    else begin
+                        state_nxt = S_IDLE;
+                    end
+                end
+            end
+            S_FIND: begin
+                finish = 0;
+                if(hit) state_nxt = S_IDLE;
+                else begin
+                    if (dirty[idx]) begin
+                        state_nxt = S_WB;
+                    end
+                    else state_nxt = S_ALLO;
+                end 
+            end
+            S_WB:   begin
+                finish = 0;
+                if(!i_mem_stall) begin
+                    state_nxt = S_ALLO;
+                end
+                else state_nxt = S_WB;
+            end
+            S_ALLO: begin
+                finish = 0;
+                if(!i_mem_stall) begin
+                    state_nxt = S_FIND;
+                end
+                else state_nxt = S_ALLO;
+            end
+            S_FINISH:   begin
+                if (cnt == (block_number-1) && !i_mem_stall) begin //cnt == block_number means all data is stored
+                    state_nxt = S_IDLE;
+                    finish = 1;
+                end
+                else begin
+                    state_nxt = S_FINISH;
+                    finish = 0;
+                end
+                
+            end
+            default: begin
+                state_nxt = state;
+                finish = 0;
+            end
+        endcase
+    end
+
+    integer i;
+    always @(*) begin
+        for (i = 0; (i < block_number) ; i = i + 1) begin
+            dirty_nxt[i] = 0;
+            tag_nxt[i] = 0;
+            valid_nxt[i] = 0;
+            data_nxt[i] = 0;
+        end
+        case(state)
+            S_IDLE: begin
+                dirty_nxt[idx] = dirty[idx];
+                mem_cen = 0;
+                mem_wen = 0;
+                proc_stall = i_proc_cen;
+                cen_nxt = i_proc_cen;
+                wen_nxt = i_proc_wen;
+                tag_nxt[idx] = tag[idx];
+                valid_nxt[idx] = valid[idx];
+                data_nxt[idx] = data[idx];
+            end
+            S_FIND: begin
+                mem_cen = 0;
+                mem_wen = 0;
+                cen_nxt = cen;
+                wen_nxt = wen;
+                tag_nxt[idx] = tag[idx];
+                valid_nxt[idx] = valid[idx];
+                if (hit) begin
+                    if (!wen) begin
+                        data_nxt[idx] = data[idx];
+                        dirty_nxt[idx] = dirty[idx];
+                    end
+                    else begin
+                        dirty_nxt[idx] = 1;
+                        data_nxt[idx] = data[idx];
+                        data_nxt[idx][ADDR_W*offset +: ADDR_W] = i_proc_wdata;
+                    end
+                    proc_stall = 0;
+                end
+                else begin
+                    proc_stall = 1;
+                    data_nxt[idx] = data[idx];
+                    if(wen) begin
+                        dirty_nxt[idx] = 1;
+                    end
+                    else begin
+                        dirty_nxt[idx] = dirty[idx];
+                    end
+                end
+            end
+            S_WB:   begin
+                data_nxt[idx] = data[idx];
+                dirty_nxt[idx] = dirty[idx];
+                mem_cen = 1;
+                mem_wen = 1;
+                proc_stall = 1;
+                cen_nxt = cen;
+                wen_nxt = wen;
+                tag_nxt[idx] = tag[idx];
+                valid_nxt[idx] = valid[idx];
+            end
+            S_ALLO: begin
+                data_nxt[idx] = i_mem_rdata;
+                dirty_nxt[idx] = dirty[idx];
+                mem_cen = 1;
+                mem_wen = 0;
+                proc_stall = 1;
+                cen_nxt = cen;
+                wen_nxt = wen;
+                tag_nxt[idx] = proc_addr[31:8];
+                valid_nxt[idx] = 1;
+            end
+            S_FINISH:   begin
+                data_nxt[idx] = data[idx];
+                cen_nxt = cen;
+                wen_nxt = wen;
+                tag_nxt[idx] = tag[idx];
+                valid_nxt[idx] = valid[idx];
+                if (dirty[idx]) begin
+                    dirty_nxt[idx] = 0;
+                    mem_cen = 1;
+                    mem_wen = 1;
+                end
+                else begin
+                    dirty_nxt[idx] = 0;
+                    mem_cen = 0;
+                    mem_wen = 0;    
+                end
+                proc_stall = 1;
+            end
+            default:    begin
+                data_nxt[idx] = 0;
+                dirty_nxt[idx] = dirty[idx];
+                mem_cen = 0;
+                mem_wen = 0;
+                proc_stall = 0;
+                cen_nxt = 0;
+                wen_nxt = 0;
+                tag_nxt[idx] = tag[idx];
+                valid_nxt[idx] = valid[idx];
+            end
+        endcase
+    end
+    
+    //counter
+    always @(posedge i_clk) begin
+        if (state == S_FINISH) begin
+            if (!i_mem_stall) begin
+                cnt <= cnt + 1;
+            end
+            else begin
+                cnt <= cnt;
+            end
+        end
+        else cnt <= 0;
+    end
+
+    //sequential part
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+            // reset
+            state <= S_IDLE;
+            for (i = 0; i < block_number; i = i+1)begin
+                data[i] <= 0;
+                valid[i] <= 0;
+                tag[i] <= 0;
+                dirty[i] <= 0;
+               
+            end
+            cen <= 0;
+            wen <= 0; 
+        end
+        else begin
+            state <= state_nxt;
+            if (cen) begin
+                data[idx] <= data_nxt[idx];
+                valid[idx] <= valid_nxt[idx];
+                tag[idx] <= tag_nxt[idx];
+                dirty[idx] <= dirty_nxt[idx];
+            end
+            cen <= cen_nxt;
+            wen <= wen_nxt;
+        end
+    end
 endmodule
